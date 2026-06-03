@@ -1,0 +1,1 @@
+# jira-vscode-ai-assistant
