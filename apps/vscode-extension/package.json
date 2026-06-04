@@ -1,0 +1,26 @@
+{
+  "name": "jira-assistant",
+  "displayName": "Jira Assistant",
+  "version": "0.0.1",
+  "publisher": "your-name",
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "jira-assistant.hello",
+        "title": "Jira Assistant: Hello"
+      }
+    ]
+  },
+  "scripts": {
+    "compile": "tsc -p ."
+  },
+  "devDependencies": {
+    "typescript": "^5.0.0",
+    "@types/node": "^20.0.0",
+    "@types/vscode": "^1.90.0"
+  }
+}
