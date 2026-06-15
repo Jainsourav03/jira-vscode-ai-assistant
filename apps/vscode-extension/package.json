@@ -3,21 +3,46 @@
   "displayName": "Jira Assistant",
   "version": "0.0.1",
   "publisher": "your-name",
+
   "engines": {
     "vscode": "^1.90.0"
   },
+
   "main": "./out/extension.js",
+
+  "activationEvents": [
+    "onCommand:jira-assistant.hello",
+    "onCommand:jira-assistant.openPanel",
+    "onCommand:jira-assistant.mockTicket",
+    "onCommand:jira-assistant.connectBackend"
+  ],
+
   "contributes": {
     "commands": [
       {
         "command": "jira-assistant.hello",
         "title": "Jira Assistant: Hello"
+      },
+      {
+        "command": "jira-assistant.openPanel",
+        "title": "Jira Assistant: Open Panel"
+      },
+      {
+        "command": "jira-assistant.mockTicket",
+        "title": "Jira Assistant: Show Mock Ticket Notification"
+      },
+      {
+        "command": "jira-assistant.connectBackend",
+        "title": "Jira Assistant: Connect Backend"
       }
     ]
   },
+
   "scripts": {
-    "compile": "tsc -p ."
+    "compile": "tsc -p .",
+    "watch": "tsc -w"
   },
+
   "devDependencies": {
     "typescript": "^5.0.0",
     "@types/node": "^20.0.0",
