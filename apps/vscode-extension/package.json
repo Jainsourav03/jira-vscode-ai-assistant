@@ -3,20 +3,16 @@
   "displayName": "Jira Assistant",
   "version": "0.0.1",
   "publisher": "your-name",
-
   "engines": {
     "vscode": "^1.90.0"
   },
-
   "main": "./out/extension.js",
-
   "activationEvents": [
     "onCommand:jira-assistant.hello",
     "onCommand:jira-assistant.openPanel",
     "onCommand:jira-assistant.mockTicket",
     "onCommand:jira-assistant.connectBackend"
   ],
-
   "contributes": {
     "commands": [
       {
@@ -37,15 +33,17 @@
       }
     ]
   },
-
   "scripts": {
     "compile": "tsc -p .",
     "watch": "tsc -w"
   },
-
   "devDependencies": {
-    "typescript": "^5.0.0",
     "@types/node": "^20.0.0",
-    "@types/vscode": "^1.90.0"
+    "@types/vscode": "^1.90.0",
+    "@types/ws": "^8.18.1",
+    "typescript": "^5.0.0"
+  },
+  "dependencies": {
+    "ws": "^8.21.0"
   }
 }

@@ -3,11 +3,11 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.activate = activate;
 exports.deactivate = deactivate;
 const vscode = require("vscode");
+const WebSocket = require("ws");
 function activate(context) {
     const hello = vscode.commands.registerCommand('jira-assistant.hello', () => {
         vscode.window.showInformationMessage('Hello from Jira Assistant!');
     });
-    // OPEN PANEL
     const openPanel = vscode.commands.registerCommand('jira-assistant.openPanel', () => {
         const panel = vscode.window.createWebviewPanel('jiraAssistant', 'Jira Assistant - Ticket', vscode.ViewColumn.One, {
             enableScripts: true
@@ -70,19 +70,38 @@ document
 </html>
 `;
     });
-    // MOCK TICKET
     const mockTicket = vscode.commands.registerCommand('jira-assistant.mockTicket', async () => {
         const action = await vscode.window.showInformationMessage('New Jira ticket assigned: PROJ-123 - Fix login redirect issue', 'Open Ticket', 'Ignore');
         if (action === 'Open Ticket') {
             vscode.window.showInformationMessage('Opening ticket...');
         }
     });
-    // CONNECT BACKEND
     const connectBackend = vscode.commands.registerCommand('jira-assistant.connectBackend', () => {
-        vscode.window.showInformationMessage('Connecting to backend...');
-        setTimeout(() => {
-            vscode.window.showErrorMessage('Backend not running');
-        }, 1000);
+        const socket = new WebSocket('ws://localhost:8000/ws/client');
+        socket.on('open', () => {
+            vscode.window.showInformationMessage('Connected to backend');
+        });
+        socket.on('message', (data) => {
+            try {
+                const message = JSON.parse(data.toString());
+                if (message.ticket_key) {
+                    vscode.window.showInformationMessage(`Ticket received:
+${message.ticket_key}`);
+                }
+                else {
+                    vscode.window.showWarningMessage('Invalid message received');
+                }
+            }
+            catch {
+                vscode.window.showErrorMessage('Invalid message format');
+            }
+        });
+        socket.on('close', () => {
+            vscode.window.showWarningMessage('Connection closed');
+        });
+        socket.on('error', () => {
+            vscode.window.showErrorMessage('Backend unavailable');
+        });
     });
     context.subscriptions.push(hello, openPanel, mockTicket, connectBackend);
 }

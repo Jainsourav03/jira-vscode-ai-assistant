@@ -1,5 +1,7 @@
 import * as vscode from 'vscode';
 
+import WebSocket = require('ws');
+
 export function activate(context: vscode.ExtensionContext) {
 
 	const hello = vscode.commands.registerCommand(
@@ -11,7 +13,7 @@ export function activate(context: vscode.ExtensionContext) {
 		}
 	);
 
-	// OPEN PANEL
+	
 	const openPanel = vscode.commands.registerCommand(
 		'jira-assistant.openPanel',
 		() => {
@@ -86,7 +88,7 @@ document
 	);   
 
 
-	// MOCK TICKET
+	
 	const mockTicket = vscode.commands.registerCommand(
 		'jira-assistant.mockTicket',
 		async () => {
@@ -107,23 +109,97 @@ document
 	);
 
 
-	// CONNECT BACKEND
+	
 	const connectBackend = vscode.commands.registerCommand(
-		'jira-assistant.connectBackend',
-		() => {
+'jira-assistant.connectBackend',
 
-			vscode.window.showInformationMessage(
-				'Connecting to backend...'
-			);
+() => {
 
-			setTimeout(() => {
-				vscode.window.showErrorMessage(
-					'Backend not running'
-				);
-			}, 1000);
+const socket =
+new WebSocket(
+'ws://localhost:8000/ws/client'
+);
 
-		}
-	);
+
+socket.on(
+'open',
+() => {
+
+vscode.window.showInformationMessage(
+'Connected to backend'
+);
+
+}
+);
+
+
+socket.on(
+'message',
+(data: WebSocket.RawData) => {
+
+try {
+
+const message =
+JSON.parse(
+data.toString()
+);
+
+
+if(message.ticket_key){
+
+vscode.window.showInformationMessage(
+`Ticket received:
+${message.ticket_key}`
+);
+
+}
+else{
+
+vscode.window.showWarningMessage(
+'Invalid message received'
+);
+
+}
+
+}
+
+catch{
+
+vscode.window.showErrorMessage(
+'Invalid message format'
+);
+
+}
+
+}
+);
+
+
+socket.on(
+'close',
+() => {
+
+vscode.window.showWarningMessage(
+'Connection closed'
+);
+
+}
+);
+
+
+socket.on(
+'error',
+() => {
+
+vscode.window.showErrorMessage(
+'Backend unavailable'
+);
+
+}
+);
+
+}
+);
 
 
 	context.subscriptions.push(
@@ -131,6 +207,7 @@ document
 		openPanel,
 		mockTicket,
 		connectBackend
+
 	);
 
 }
