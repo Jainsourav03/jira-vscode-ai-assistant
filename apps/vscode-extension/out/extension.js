@@ -4,6 +4,7 @@ exports.activate = activate;
 exports.deactivate = deactivate;
 const vscode = require("vscode");
 const WebSocket = require("ws");
+let latestTicket;
 function activate(context) {
     const hello = vscode.commands.registerCommand('jira-assistant.hello', () => {
         vscode.window.showInformationMessage('Hello from Jira Assistant!');
@@ -20,10 +21,18 @@ function activate(context) {
 
 <h2>Jira Ticket Details</h2>
 
-<p><b>Ticket Key:</b> PROJ-123</p>
-<p><b>Ticket Title:</b> Fix login redirect issue</p>
-<p><b>Status:</b> In Progress</p>
-<p><b>Priority:</b> High</p>
+<p><b>Ticket Key:</b>
+${latestTicket?.ticket_key ?? 'No Ticket'}
+</p>
+<p><b>Ticket Title:</b>
+${latestTicket?.title ?? 'No Title'}
+</p>
+<p><b>Priority:</b>
+${latestTicket?.priority ?? 'Medium'}
+</p>
+<p><b>Description:</b>
+${latestTicket?.description ?? 'No Description'}
+</p>
 
 <p>
 Users are not redirected properly after login.
@@ -81,19 +90,27 @@ document
         socket.on('open', () => {
             vscode.window.showInformationMessage('Connected to backend');
         });
-        socket.on('message', (data) => {
+        socket.on('message', async (data) => {
             try {
-                const message = JSON.parse(data.toString());
-                if (message.ticket_key) {
-                    vscode.window.showInformationMessage(`Ticket received:
-${message.ticket_key}`);
+                const ticket = JSON.parse(data.toString());
+                if (ticket.ticket_key &&
+                    ticket.title) {
+                    latestTicket =
+                        ticket;
+                    const action = await vscode.window.showInformationMessage(`New Jira ticket assigned:
+${ticket.ticket_key}
+-
+${ticket.title}`, 'Open Ticket');
+                    if (action === 'Open Ticket') {
+                        vscode.commands.executeCommand('jira-assistant.openPanel');
+                    }
                 }
                 else {
-                    vscode.window.showWarningMessage('Invalid message received');
+                    vscode.window.showErrorMessage('Invalid message received');
                 }
             }
             catch {
-                vscode.window.showErrorMessage('Invalid message format');
+                vscode.window.showErrorMessage('Invalid backend data');
             }
         });
         socket.on('close', () => {
