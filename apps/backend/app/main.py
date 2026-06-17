@@ -18,6 +18,13 @@ async def websocket_client(websocket: WebSocket):
 
     print("VS Code client connected")
     print(f"Connected clients: {len(connected_clients)}")
+    await websocket.send_json({
+    "ticket_key": "PROJ-123",
+    "title": "Fix login redirect issue",
+    "status":"In Progress",
+"priority":"High",
+"description":"Users are not redirected properly after login."
+    })
 
     try:
         while True:
