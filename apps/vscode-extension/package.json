@@ -14,25 +14,48 @@
     "onCommand:jira-assistant.connectBackend"
   ],
   "contributes": {
-    "commands": [
-      {
-        "command": "jira-assistant.hello",
-        "title": "Jira Assistant: Hello"
+  "commands": [
+    {
+      "command": "jira-assistant.hello",
+      "title": "Jira Assistant: Hello"
+    },
+    {
+      "command": "jira-assistant.openPanel",
+      "title": "Jira Assistant: Open Panel"
+    },
+    {
+      "command": "jira-assistant.mockTicket",
+      "title": "Jira Assistant: Show Mock Ticket Notification"
+    },
+    {
+      "command": "jira-assistant.connectBackend",
+      "title": "Jira Assistant: Connect Backend"
+    }
+  ],
+
+  "configuration": {
+    "title": "Jira Assistant",
+
+    "properties": {
+
+      "jiraAssistant.backendUrl": {
+        "type": "string",
+        "default": "http://localhost:8000"
       },
-      {
-        "command": "jira-assistant.openPanel",
-        "title": "Jira Assistant: Open Panel"
+
+      "jiraAssistant.websocketUrl": {
+        "type": "string",
+        "default": "ws://localhost:8000/ws/client"
       },
-      {
-        "command": "jira-assistant.mockTicket",
-        "title": "Jira Assistant: Show Mock Ticket Notification"
-      },
-      {
-        "command": "jira-assistant.connectBackend",
-        "title": "Jira Assistant: Connect Backend"
+
+      "jiraAssistant.userEmail": {
+        "type": "string",
+        "default": "developer@example.com"
       }
-    ]
-  },
+
+    }
+  }
+},
   "scripts": {
     "compile": "tsc -p .",
     "watch": "tsc -w"

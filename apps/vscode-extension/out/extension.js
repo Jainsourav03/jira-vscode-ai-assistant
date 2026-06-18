@@ -34,9 +34,7 @@ ${latestTicket?.priority ?? 'Medium'}
 ${latestTicket?.description ?? 'No Description'}
 </p>
 
-<p>
-Users are not redirected properly after login.
-</p>
+
 
 <a href="https://jira.atlassian.com">
 Open Jira Ticket
@@ -85,10 +83,15 @@ document
             vscode.window.showInformationMessage('Opening ticket...');
         }
     });
+    const config = vscode.workspace.getConfiguration('jiraAssistant');
+    const backendUrl = config.get('backendUrl');
+    const websocketUrl = config.get('websocketUrl');
+    const userEmail = config.get('userEmail');
     const connectBackend = vscode.commands.registerCommand('jira-assistant.connectBackend', () => {
-        const socket = new WebSocket('ws://localhost:8000/ws/client');
+        const socket = new WebSocket(websocketUrl);
         socket.on('open', () => {
-            vscode.window.showInformationMessage('Connected to backend');
+            vscode.window.showInformationMessage(`Connected to backend as ${userEmail}`);
+            ``;
         });
         socket.on('message', async (data) => {
             try {

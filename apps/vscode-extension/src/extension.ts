@@ -114,7 +114,25 @@ document
 			}
 		}
 	);
+const config =
+vscode.workspace.getConfiguration(
+'jiraAssistant'
+);
 
+const backendUrl =
+config.get<string>(
+'backendUrl'
+);
+
+const websocketUrl =
+config.get<string>(
+'websocketUrl'
+);
+
+const userEmail =
+config.get<string>(
+'userEmail'
+);
 
 	const connectBackend =
 vscode.commands.registerCommand(
@@ -123,7 +141,7 @@ vscode.commands.registerCommand(
 
 const socket =
 new WebSocket(
-'ws://localhost:8000/ws/client'
+websocketUrl!
 );
 
 socket.on(
@@ -131,9 +149,8 @@ socket.on(
 () => {
 
 vscode.window.showInformationMessage(
-'Connected to backend'
-);
-
+`Connected to backend as ${userEmail}`
+);``
 }
 );
 
