@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 
 import WebSocket = require('ws');
+let latestTicket : any 
 
 export function activate(context: vscode.ExtensionContext) {
 
@@ -35,14 +36,20 @@ export function activate(context: vscode.ExtensionContext) {
 
 <h2>Jira Ticket Details</h2>
 
-<p><b>Ticket Key:</b> PROJ-123</p>
-<p><b>Ticket Title:</b> Fix login redirect issue</p>
-<p><b>Status:</b> In Progress</p>
-<p><b>Priority:</b> High</p>
-
-<p>
-Users are not redirected properly after login.
+<p><b>Ticket Key:</b>
+${latestTicket?.ticket_key ?? 'No Ticket'}
 </p>
+<p><b>Ticket Title:</b>
+${latestTicket?.title ?? 'No Title'}
+</p>
+<p><b>Priority:</b>
+${latestTicket?.priority ?? 'Medium'}
+</p>
+<p><b>Description:</b>
+${latestTicket?.description ?? 'No Description'}
+</p>
+
+
 
 <a href="https://jira.atlassian.com">
 Open Jira Ticket
@@ -109,17 +116,15 @@ document
 	);
 
 
-	
-	const connectBackend = vscode.commands.registerCommand(
+	const connectBackend =
+vscode.commands.registerCommand(
 'jira-assistant.connectBackend',
-
 () => {
 
 const socket =
 new WebSocket(
 'ws://localhost:8000/ws/client'
 );
-
 
 socket.on(
 'open',
@@ -132,30 +137,45 @@ vscode.window.showInformationMessage(
 }
 );
 
-
 socket.on(
 'message',
-(data: WebSocket.RawData) => {
+async (data:string)=>{
 
-try {
+try{
 
-const message =
+const ticket =
 JSON.parse(
 data.toString()
 );
 
+if(
+ticket.ticket_key &&
+ticket.title
+){
 
-if(message.ticket_key){
+latestTicket =
+ticket;
 
-vscode.window.showInformationMessage(
-`Ticket received:
-${message.ticket_key}`
+const action =
+await vscode.window.showInformationMessage(
+`New Jira ticket assigned:
+${ticket.ticket_key}
+-
+${ticket.title}`,
+'Open Ticket'
 );
 
+if(action==='Open Ticket'){
+vscode.commands.executeCommand(
+'jira-assistant.openPanel'
+);
 }
+
+}
+
 else{
 
-vscode.window.showWarningMessage(
+vscode.window.showErrorMessage(
 'Invalid message received'
 );
 
@@ -166,18 +186,17 @@ vscode.window.showWarningMessage(
 catch{
 
 vscode.window.showErrorMessage(
-'Invalid message format'
+'Invalid backend data'
 );
 
 }
 
 }
 );
-
 
 socket.on(
 'close',
-() => {
+()=>{
 
 vscode.window.showWarningMessage(
 'Connection closed'
@@ -186,10 +205,9 @@ vscode.window.showWarningMessage(
 }
 );
 
-
 socket.on(
 'error',
-() => {
+()=>{
 
 vscode.window.showErrorMessage(
 'Backend unavailable'
@@ -200,6 +218,7 @@ vscode.window.showErrorMessage(
 
 }
 );
+	
 
 
 	context.subscriptions.push(
@@ -209,6 +228,7 @@ vscode.window.showErrorMessage(
 		connectBackend
 
 	);
+	
 
 }
 
