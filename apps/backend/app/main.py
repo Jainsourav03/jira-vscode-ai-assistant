@@ -1,5 +1,6 @@
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from app.models import JiraTicketEvent
+from app.response_models import MockTicketResponse
 import logging
 
 # Configure logging
@@ -63,7 +64,7 @@ def health_check():
     }
 
 
-@app.post("/dev/mock-ticket",response_model=JiraTicketEvent)
+@app.post("/dev/mock-ticket", response_model=MockTicketResponse)
 async def get_mock_ticket():
 
     # Create mock ticket event
@@ -95,7 +96,7 @@ async def get_mock_ticket():
             f"Broadcasting ticket to {len(connected_clients)} clients"
         )
 
-        for client in connected_clients:
+        for client in connected_clients.copy():
             try:
                 await client.send_json(mock_ticket.model_dump())
 
@@ -110,9 +111,8 @@ async def get_mock_ticket():
     else:
         logger.info("No clients connected")
 
-    return {
-        "broadcast_attempted": broadcast_attempted,
-        "connected_clients": len(connected_clients),
-        "ticket_event": mock_ticket
-    }
-
+    return MockTicketResponse(
+        broadcast_attempted=broadcast_attempted,
+        connected_clients=len(connected_clients),
+        ticket_event=mock_ticket
+    )
