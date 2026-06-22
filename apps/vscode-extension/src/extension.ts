@@ -40,13 +40,13 @@ export function activate(context: vscode.ExtensionContext) {
 ${latestTicket?.ticket_key ?? 'No Ticket'}
 </p>
 <p><b>Ticket Title:</b>
-${latestTicket?.title ?? 'No Title'}
+${latestTicket?.ticket_title ?? 'No Title'}
 </p>
 <p><b>Priority:</b>
-${latestTicket?.priority ?? 'Medium'}
+${latestTicket?.ticket_priority ?? 'Medium'}
 </p>
 <p><b>Description:</b>
-${latestTicket?.description ?? 'No Description'}
+${latestTicket?.ticket_description ?? 'No Description'}
 </p>
 
 
@@ -140,7 +140,7 @@ vscode.window.showInformationMessage(
 socket.on(
 'message',
 async (data:string)=>{
-
+	console.log(data.toString());
 try{
 
 const ticket =
@@ -150,7 +150,7 @@ data.toString()
 
 if(
 ticket.ticket_key &&
-ticket.title
+ticket.ticket_title
 ){
 
 latestTicket =
@@ -161,7 +161,7 @@ await vscode.window.showInformationMessage(
 `New Jira ticket assigned:
 ${ticket.ticket_key}
 -
-${ticket.title}`,
+${ticket.ticket_titles}`,
 'Open Ticket'
 );
 

@@ -25,18 +25,16 @@ function activate(context) {
 ${latestTicket?.ticket_key ?? 'No Ticket'}
 </p>
 <p><b>Ticket Title:</b>
-${latestTicket?.title ?? 'No Title'}
+${latestTicket?.ticket_title ?? 'No Title'}
 </p>
 <p><b>Priority:</b>
-${latestTicket?.priority ?? 'Medium'}
+${latestTicket?.ticket_priority ?? 'Medium'}
 </p>
 <p><b>Description:</b>
-${latestTicket?.description ?? 'No Description'}
+${latestTicket?.ticket_description ?? 'No Description'}
 </p>
 
-<p>
-Users are not redirected properly after login.
-</p>
+
 
 <a href="https://jira.atlassian.com">
 Open Jira Ticket
@@ -91,16 +89,17 @@ document
             vscode.window.showInformationMessage('Connected to backend');
         });
         socket.on('message', async (data) => {
+            console.log(data.toString());
             try {
                 const ticket = JSON.parse(data.toString());
                 if (ticket.ticket_key &&
-                    ticket.title) {
+                    ticket.ticket_title) {
                     latestTicket =
                         ticket;
                     const action = await vscode.window.showInformationMessage(`New Jira ticket assigned:
 ${ticket.ticket_key}
 -
-${ticket.title}`, 'Open Ticket');
+${ticket.ticket_titles}`, 'Open Ticket');
                     if (action === 'Open Ticket') {
                         vscode.commands.executeCommand('jira-assistant.openPanel');
                     }
