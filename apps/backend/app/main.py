@@ -2,28 +2,26 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from app.models import JiraTicketEvent
 from app.response_models import MockTicketResponse
 import logging
+from datetime import datetime
+import uuid
 
-# Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 app = FastAPI(title="Jira VS Code Assistant Backend")
 
-# Store connected VS Code clients
-connected_clients = set()
-# Prevent duplicate ticket sending
-
-ticket_sent = False
+# Week 2 Connection Manager
+clients_by_email = {}
 
 def create_mock_ticket():
     mock_ticket = JiraTicketEvent(
-        event_type = "ticket_assigned",
-        ticket_key = "PROJ-123",
-        ticket_title = "Fix login redirect issue",
-        ticket_description = "Users are redirected to the wrong page after successful login.",
-        ticket_status = "To Do",
+        event_type="ticket_assigned",
+        ticket_key="PROJ-123",
+        ticket_title="Fix login redirect issue",
+        ticket_description="Users are redirected to wrong page after login.",
+        ticket_status="To Do",
         ticket_priority="High",
-        ticket_url = "https://jira.example.com/browse/PROJ-123",
+        ticket_url="https://jira.example.com/browse/PROJ-123",
         comments=[
             "Issue reported by QA team.",
             "Needs investigation."
@@ -31,78 +29,106 @@ def create_mock_ticket():
     )
     return mock_ticket
 
+def register_client(email, websocket):
+
+    client_id = str(uuid.uuid4())
+
+    client_data = {
+
+        "client_id": client_id,
+        "websocket": websocket,
+        "connected_at": datetime.now().isoformat(),
+        "last_seen": datetime.now().isoformat()
+    }
+
+    if email not in clients_by_email:
+
+        clients_by_email[email] = []
+
+    clients_by_email[email].append(client_data)
+
+    return client_id
+
 async def send_ticket_to_clients():
 
-    global ticket_sent
+    ticket = create_mock_ticket()
 
-    # If already sent, don't send again
-    if ticket_sent:
-        return
-    mock_ticket = create_mock_ticket()
-    logger.info(f"Automatic Jira ticket created: {mock_ticket.ticket_key}")
-    disconnected_clients = []
-    for client in connected_clients.copy():
-        try:
-            await client.send_json(mock_ticket.model_dump())
-            logger.info("Ticket sent automatically")
-            ticket_sent = True
+    logger.info(f"Automatic Jira ticket created: {ticket.ticket_key}")
 
-        except Exception as e:
-            logger.error(f"Broadcast failed: {e}")
-            disconnected_clients.append(client)
-
-    for client in disconnected_clients:
-     connected_clients.remove(client) 
+    for email, clients in clients_by_email.items():
+        for client in clients:
+            await client["websocket"].send_json(ticket.model_dump())
+            client["last_seen"] = datetime.now().isoformat()
+            logger.info(f"Ticket sent to {email}")
 
 @app.websocket("/ws/client")
 async def websocket_client(websocket: WebSocket):
-
     await websocket.accept()
-    connected_clients.add(websocket)
-    logger.info("VS Code client connected")
-    logger.info(f"Connected clients: {len(connected_clients)}")
 
-# Automatically send ticket once
-    await send_ticket_to_clients()
+    email = None
+    client_id = None
+
+    logger.info("VS Code client connected")
 
     try:
+        # First message from VS Code
+        data = await websocket.receive_json()
+        email = data["email"]
+        client_id = register_client(email, websocket)
+
+        logger.info(f"{email} connected {client_id}")
+        await send_ticket_to_clients()
+
         while True:
             message = await websocket.receive_text()
-            logger.info(f"Received message: {message}")
+            logger.info(f"Message received {message}")
+
+            for client in clients_by_email[email]:
+                if client["client_id"] == client_id:
+                    client["last_seen"] = (datetime.now().isoformat())
 
     except WebSocketDisconnect:
-        connected_clients.remove(websocket)
-        logger.info("VS Code client disconnected")
-        logger.info(f"Connected clients: {len(connected_clients)}")
+        if email and client_id:
+            for client in clients_by_email[email]:
+                if client["client_id"] == client_id:
+                    clients_by_email[email].remove(client)
+
+            if len(clients_by_email[email]) == 0:
+                del clients_by_email[email]
+
+        logger.info("Client disconnected")
 
 @app.get("/dev/clients")
 def get_connected_clients():
 
-    logger.info( "/dev/clients endpoint accessed")
+    response = {}
 
-    return {
-        "connected_clients":
-        len(connected_clients)
-    }
+    for email, clients in clients_by_email.items():
+
+        response[email] = {"active_clients":len(clients)}
+
+    return response
 
 @app.get("/health")
 def health_check():
-    logger.info("Health check endpoint accessed")
 
     return {
-"service": "jira-vscode-assistant-backend",
-"status": "healthy",
-"message": "Backend is running"
- }
+        "service": "jira-vscode-assistant-backend",
+        "status": "healthy",
+        "message": "Backend is running"
+    }
 
-# Keep this for Swagger schema
-@app.post("/dev/mock-ticket",response_model=MockTicketResponse)
+@app.post("/dev/mock-ticket",
+response_model=MockTicketResponse)
+
 async def get_mock_ticket():
-    mock_ticket = create_mock_ticket()
-    logger.info(f"Manual ticket created: {mock_ticket.ticket_key}")
+    ticket = create_mock_ticket()
     await send_ticket_to_clients()
     return MockTicketResponse(
         broadcast_attempted=True,
-        connected_clients=len(connected_clients),
-        ticket_event=mock_ticket
+        connected_clients=sum(
+            len(value)
+            for value in clients_by_email.values()
+        ),
+        ticket_event=ticket
     )
