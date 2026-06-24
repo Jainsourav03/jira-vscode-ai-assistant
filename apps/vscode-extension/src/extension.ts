@@ -1,7 +1,10 @@
 import * as vscode from 'vscode';
-
 import WebSocket = require('ws');
-let latestTicket : any 
+
+let latestTicket: any;
+let socket: WebSocket | undefined;
+let connectionStatus =
+'Disconnected';
 
 export function activate(context: vscode.ExtensionContext) {
 
@@ -14,7 +17,6 @@ export function activate(context: vscode.ExtensionContext) {
 		}
 	);
 
-	
 	const openPanel = vscode.commands.registerCommand(
 		'jira-assistant.openPanel',
 		() => {
@@ -39,17 +41,18 @@ export function activate(context: vscode.ExtensionContext) {
 <p><b>Ticket Key:</b>
 ${latestTicket?.ticket_key ?? 'No Ticket'}
 </p>
+
 <p><b>Ticket Title:</b>
-${latestTicket?.ticket_title ?? 'No Title'}
+${latestTicket?.title ?? 'No Title'}
 </p>
+
 <p><b>Priority:</b>
-${latestTicket?.ticket_priority ?? 'Medium'}
+${latestTicket?.priority ?? 'Medium'}
 </p>
+
 <p><b>Description:</b>
-${latestTicket?.ticket_description ?? 'No Description'}
+${latestTicket?.description ?? 'No Description'}
 </p>
-
-
 
 <a href="https://jira.atlassian.com">
 Open Jira Ticket
@@ -92,54 +95,66 @@ document
 </html>
 `;
 		}
-	);   
+	);
 
-
-	
 	const mockTicket = vscode.commands.registerCommand(
 		'jira-assistant.mockTicket',
 		async () => {
 
 			const action =
-				await vscode.window.showInformationMessage(
-					'New Jira ticket assigned: PROJ-123 - Fix login redirect issue',
-					'Open Ticket',
-					'Ignore'
-				);
+			await vscode.window.showInformationMessage(
+				'New Jira ticket assigned: PROJ-123 - Fix login redirect issue',
+				'Open Ticket',
+				'Ignore'
+			);
 
-			if (action === 'Open Ticket') {
+			if(action==='Open Ticket'){
+
 				vscode.window.showInformationMessage(
 					'Opening ticket...'
 				);
+
 			}
+
 		}
 	);
-const config =
-vscode.workspace.getConfiguration(
-'jiraAssistant'
-);
 
-const backendUrl =
-config.get<string>(
-'backendUrl'
-);
+	const config =
+	vscode.workspace.getConfiguration(
+		'jiraAssistant'
+	);
 
-const websocketUrl =
-config.get<string>(
-'websocketUrl'
-);
+	const backendUrl =
+	config.get<string>(
+		'backendUrl'
+	);
 
-const userEmail =
-config.get<string>(
-'userEmail'
-);
+	const websocketUrl =
+	config.get<string>(
+		'websocketUrl'
+	);
 
-	const connectBackend =
+	const userEmail =
+	config.get<string>(
+		'userEmail'
+	);
+
+	const clientId =
+`vscode-client-${Date.now()}`;
+
+const connectBackend =
 vscode.commands.registerCommand(
 'jira-assistant.connectBackend',
 () => {
 
-const socket =
+if(socket){
+
+socket.close();
+
+}
+connectionStatus =
+'Connecting...';
+socket =
 new WebSocket(
 websocketUrl!
 );
@@ -148,72 +163,157 @@ socket.on(
 'open',
 () => {
 
+connectionStatus =
+`Connected as ${userEmail}`;
+
 vscode.window.showInformationMessage(
-`Connected to backend as ${userEmail}`
-);``
+connectionStatus
+);
+
+/* Register client */
+
+socket!.send(
+
+JSON.stringify({
+
+type:
+'client_register',
+
+userEmail:
+userEmail,
+
+clientId:
+clientId
+
+})
+
+);
+
 }
 );
 
 socket.on(
 'message',
-async (data:string)=>{
-	console.log(data.toString());
+async (data)=>{
+
 try{
 
-const ticket =
+const message =
 JSON.parse(
 data.toString()
 );
 
+/* Registration acknowledgement */
+
 if(
-ticket.ticket_key &&
-ticket.ticket_title
+message.type===
+'client_registered'
 ){
 
-latestTicket =
-ticket;
+if(
+message.status===
+'success'
+){
+
+vscode.window.showInformationMessage(
+`Registered successfully as ${message.userEmail}`
+);
+
+}
+else{
+
+connectionStatus =
+'Registration failed';
+
+vscode.window.showErrorMessage(
+connectionStatus
+);
+
+}
+
+return;
+
+}
+
+/* Ticket messages */
+
+if(
+message.ticket_key &&
+message.ticket_title
+){
+
+latestTicket = {
+
+ticket_key:
+message.ticket_key,
+
+title:
+message.ticket_title,
+
+priority:
+message.ticket_priority,
+
+description:
+message.ticket_description
+
+};
 
 const action =
 await vscode.window.showInformationMessage(
+
 `New Jira ticket assigned:
-${ticket.ticket_key}
--
-${ticket.ticket_titles}`,
+${latestTicket.ticket_key}
+
+
+${latestTicket.title}`,
+
 'Open Ticket'
+
 );
 
-if(action==='Open Ticket'){
-vscode.commands.executeCommand(
+if(
+action==='Open Ticket'
+){
+
+await vscode.commands.executeCommand(
 'jira-assistant.openPanel'
 );
+
 }
 
 }
+
+
 
 else{
 
-vscode.window.showErrorMessage(
-'Invalid message received'
+vscode.window.showWarningMessage(
+'Unknown backend event'
 );
 
 }
 
 }
+
+
 
 catch{
 
 vscode.window.showErrorMessage(
-'Invalid backend data'
+'Invalid backend JSON'
 );
 
 }
 
 }
 );
+
 
 socket.on(
 'close',
 ()=>{
+	connectionStatus =
+'Disconnected';
 
 vscode.window.showWarningMessage(
 'Connection closed'
@@ -225,9 +325,10 @@ vscode.window.showWarningMessage(
 socket.on(
 'error',
 ()=>{
+	connectionStatus = 'Backend unavailable';
 
 vscode.window.showErrorMessage(
-'Backend unavailable'
+connectionStatus
 );
 
 }
@@ -235,17 +336,26 @@ vscode.window.showErrorMessage(
 
 }
 );
-	
+const showConnectionStatus =
+vscode.commands.registerCommand(
 
+'jira-assistant.showConnectionStatus',
 
+()=>{
+
+vscode.window.showInformationMessage(
+connectionStatus
+);
+
+}
+);
 	context.subscriptions.push(
 		hello,
 		openPanel,
 		mockTicket,
-		connectBackend
-
+		connectBackend,
+		showConnectionStatus
 	);
-	
 
 }
 

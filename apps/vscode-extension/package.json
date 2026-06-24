@@ -30,7 +30,11 @@
     {
       "command": "jira-assistant.connectBackend",
       "title": "Jira Assistant: Connect Backend"
-    }
+    },
+    {
+  "command": "jira-assistant.showConnectionStatus",
+  "title": "Jira Assistant: Show Connection Status"
+}
   ],
 
   "configuration": {

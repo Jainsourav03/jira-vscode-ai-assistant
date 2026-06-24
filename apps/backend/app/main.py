@@ -4,6 +4,7 @@ from app.response_models import MockTicketResponse
 import logging
 from datetime import datetime
 import uuid
+import asyncio
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -60,9 +61,9 @@ async def send_ticket_to_clients():
             await client["websocket"].send_json(ticket.model_dump())
             client["last_seen"] = datetime.now().isoformat()
             logger.info(f"Ticket sent to {email}")
-
 @app.websocket("/ws/client")
 async def websocket_client(websocket: WebSocket):
+
     await websocket.accept()
 
     email = None
@@ -71,33 +72,71 @@ async def websocket_client(websocket: WebSocket):
     logger.info("VS Code client connected")
 
     try:
+
         # First message from VS Code
         data = await websocket.receive_json()
-        email = data["email"]
-        client_id = register_client(email, websocket)
 
-        logger.info(f"{email} connected {client_id}")
+        email = data["userEmail"]
+
+        client_id = register_client(
+            email,
+            websocket
+        )
+
+        # Send acknowledgement
+        await websocket.send_json({
+
+            "type": "client_registered",
+
+            "status": "success",
+
+            "userEmail": email
+
+        })
+
+        logger.info(
+            f"{email} connected {client_id}"
+        )
+        await asyncio.sleep(1)
+
         await send_ticket_to_clients()
 
         while True:
+
             message = await websocket.receive_text()
-            logger.info(f"Message received {message}")
+
+            logger.info(
+                f"Message received {message}"
+            )
+            await send_ticket_to_clients()
 
             for client in clients_by_email[email]:
+
                 if client["client_id"] == client_id:
-                    client["last_seen"] = (datetime.now().isoformat())
+
+                    client["last_seen"] = (
+                        datetime.now().isoformat()
+                    )
 
     except WebSocketDisconnect:
+
         if email and client_id:
+
             for client in clients_by_email[email]:
+
                 if client["client_id"] == client_id:
-                    clients_by_email[email].remove(client)
+
+                    clients_by_email[email].remove(
+                        client
+                    )
 
             if len(clients_by_email[email]) == 0:
+
                 del clients_by_email[email]
 
-        logger.info("Client disconnected")
-
+        logger.info(
+            "Client disconnected"
+        )
 @app.get("/dev/clients")
 def get_connected_clients():
 

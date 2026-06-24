@@ -1,5 +1,6 @@
 import websocket
 import json
+import uuid
 
 print("Connecting...")
 
@@ -8,19 +9,43 @@ ws = websocket.create_connection(
 )
 
 print("Connected")
-# register client
+
 register_data = {
-    "email": "developer@example.com"
+
+    "type":
+    "client_register",
+
+    "userEmail":
+    "developer@example.com",
+
+    "clientId":
+    f"vscode-client-{uuid.uuid4()}"
+
 }
-ws.send(json.dumps(register_data))
+
+ws.send(
+    json.dumps(register_data)
+)
+
 print("Registration sent")
+
 while True:
-    
+
     try:
+
         message = ws.recv()
-        print("RAW MESSAGE RECEIVED:")
+
+        print(
+            "RAW MESSAGE RECEIVED:"
+        )
+
         print(message)
 
     except Exception as e:
-        print("Error:", e)
+
+        print(
+            "Error:",
+            e
+        )
+
         break

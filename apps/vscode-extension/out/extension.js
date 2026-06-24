@@ -5,6 +5,8 @@ exports.deactivate = deactivate;
 const vscode = require("vscode");
 const WebSocket = require("ws");
 let latestTicket;
+let socket;
+let connectionStatus = 'Disconnected';
 function activate(context) {
     const hello = vscode.commands.registerCommand('jira-assistant.hello', () => {
         vscode.window.showInformationMessage('Hello from Jira Assistant!');
@@ -24,17 +26,18 @@ function activate(context) {
 <p><b>Ticket Key:</b>
 ${latestTicket?.ticket_key ?? 'No Ticket'}
 </p>
+
 <p><b>Ticket Title:</b>
-${latestTicket?.ticket_title ?? 'No Title'}
+${latestTicket?.title ?? 'No Title'}
 </p>
+
 <p><b>Priority:</b>
-${latestTicket?.ticket_priority ?? 'Medium'}
+${latestTicket?.priority ?? 'Medium'}
 </p>
+
 <p><b>Description:</b>
-${latestTicket?.ticket_description ?? 'No Description'}
+${latestTicket?.description ?? 'No Description'}
 </p>
-
-
 
 <a href="https://jira.atlassian.com">
 Open Jira Ticket
@@ -87,44 +90,83 @@ document
     const backendUrl = config.get('backendUrl');
     const websocketUrl = config.get('websocketUrl');
     const userEmail = config.get('userEmail');
+    const clientId = `vscode-client-${Date.now()}`;
     const connectBackend = vscode.commands.registerCommand('jira-assistant.connectBackend', () => {
-        const socket = new WebSocket(websocketUrl);
+        if (socket) {
+            socket.close();
+        }
+        connectionStatus =
+            'Connecting...';
+        socket =
+            new WebSocket(websocketUrl);
         socket.on('open', () => {
-            vscode.window.showInformationMessage(`Connected to backend as ${userEmail}`);
-            ``;
+            connectionStatus =
+                `Connected as ${userEmail}`;
+            vscode.window.showInformationMessage(connectionStatus);
+            /* Register client */
+            socket.send(JSON.stringify({
+                type: 'client_register',
+                userEmail: userEmail,
+                clientId: clientId
+            }));
         });
         socket.on('message', async (data) => {
-            console.log(data.toString());
             try {
-                const ticket = JSON.parse(data.toString());
-                if (ticket.ticket_key &&
-                    ticket.ticket_title) {
-                    latestTicket =
-                        ticket;
+                const message = JSON.parse(data.toString());
+                /* Registration acknowledgement */
+                if (message.type ===
+                    'client_registered') {
+                    if (message.status ===
+                        'success') {
+                        vscode.window.showInformationMessage(`Registered successfully as ${message.userEmail}`);
+                    }
+                    else {
+                        connectionStatus =
+                            'Registration failed';
+                        vscode.window.showErrorMessage(connectionStatus);
+                    }
+                    return;
+                }
+                /* Ticket messages */
+                if (message.ticket_key &&
+                    message.ticket_title) {
+                    latestTicket = {
+                        ticket_key: message.ticket_key,
+                        title: message.ticket_title,
+                        priority: message.ticket_priority,
+                        description: message.ticket_description
+                    };
                     const action = await vscode.window.showInformationMessage(`New Jira ticket assigned:
-${ticket.ticket_key}
--
-${ticket.ticket_titles}`, 'Open Ticket');
+${latestTicket.ticket_key}
+
+
+${latestTicket.title}`, 'Open Ticket');
                     if (action === 'Open Ticket') {
-                        vscode.commands.executeCommand('jira-assistant.openPanel');
+                        await vscode.commands.executeCommand('jira-assistant.openPanel');
                     }
                 }
                 else {
-                    vscode.window.showErrorMessage('Invalid message received');
+                    vscode.window.showWarningMessage('Unknown backend event');
                 }
             }
             catch {
-                vscode.window.showErrorMessage('Invalid backend data');
+                vscode.window.showErrorMessage('Invalid backend JSON');
             }
         });
         socket.on('close', () => {
+            connectionStatus =
+                'Disconnected';
             vscode.window.showWarningMessage('Connection closed');
         });
         socket.on('error', () => {
-            vscode.window.showErrorMessage('Backend unavailable');
+            connectionStatus = 'Backend unavailable';
+            vscode.window.showErrorMessage(connectionStatus);
         });
     });
-    context.subscriptions.push(hello, openPanel, mockTicket, connectBackend);
+    const showConnectionStatus = vscode.commands.registerCommand('jira-assistant.showConnectionStatus', () => {
+        vscode.window.showInformationMessage(connectionStatus);
+    });
+    context.subscriptions.push(hello, openPanel, mockTicket, connectBackend, showConnectionStatus);
 }
 function deactivate() { }
 //# sourceMappingURL=extension.js.map
