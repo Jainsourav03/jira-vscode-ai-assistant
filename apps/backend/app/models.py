@@ -10,3 +10,4 @@ class JiraTicketEvent(BaseModel):
     ticket_priority: str
     ticket_url: str
     comments: List[str]
+    assignee_email: str
