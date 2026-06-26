@@ -1,7 +1,7 @@
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel
-from app.models import JiraTicketEvent
-from app.response_models import MockTicketResponse
+from app.models import (JiraTicketEvent, DeveloperContextRequest)
+from app.response_models import (MockTicketResponse, DeveloperContextResponse)
 import logging
 from datetime import datetime
 
@@ -15,6 +15,13 @@ app = FastAPI(title="Jira VS Code Assistant Backend")
 
 # Store connected clients
 clients_by_email = {}
+
+# Store developer context submissions
+developer_contexts = {}
+
+# Store generated mock tickets
+generated_tickets = []
+
 # -------------------------------
 # Task 3 Request Model
 # -------------------------------
@@ -206,17 +213,57 @@ def health_check():
        "status":"healthy",
        "message":"Backend is running"
    }
+
+# -------------------------------
+# Task 6 Developer Context Debug Endpoint
+# -------------------------------
+@app.get("/dev/tickets/{ticket_key}/developer-context")
+def get_ticket_developer_context(ticket_key: str):
+
+    submissions = developer_contexts.get(ticket_key, [])
+
+    logger.info(
+        f"Developer context requested for ticket: {ticket_key}"
+    )
+
+    return {
+        "ticketKey": ticket_key,
+        "submissions": submissions
+    }
+
+# -------------------------------
+# Task 7 Ticket History Endpoint
+# -------------------------------
+@app.get("/dev/tickets")
+def get_generated_tickets():
+
+    logger.info("Returning generated ticket history")
+
+    return {
+        "tickets": generated_tickets
+    }
+
 # -------------------------------
 # Task 3 Mock Ticket Endpoint
 # -------------------------------
 
 
 @app.post("/dev/mock-ticket")
-async def get_mock_ticket(
-    request: MockTicketRequest | None = None
-):
+async def get_mock_ticket(request: MockTicketRequest | None = None):
 
     ticket = create_mock_ticket(request)
+
+    # Store generated ticket in memory
+    generated_tickets.append({
+    "key": ticket.ticket_key,
+    "title": ticket.ticket_title,
+    "assigneeEmail": ticket.assignee_email,
+    "status": ticket.ticket_status
+})
+
+    logger.info(
+    f"Mock ticket stored | Ticket: {ticket.ticket_key}"
+    )
 
     matched_clients = await send_ticket_to_assignee(ticket)
 
@@ -237,3 +284,63 @@ async def get_mock_ticket(
         "matchedClients": matched_clients,
         "ticketKey": ticket.ticket_key
     }
+
+# -------------------------------
+# Task 5
+# Submit Developer Context
+# -------------------------------
+@app.post(
+    "/tickets/{ticket_key}/developer-context",
+    response_model=DeveloperContextResponse
+)
+def submit_developer_context(
+    ticket_key: str,
+    request: DeveloperContextRequest
+):
+
+    # Validate ticket key
+    if not ticket_key.strip():
+        return DeveloperContextResponse(
+            success=False,
+            message="Invalid ticket key",
+            ticketKey=ticket_key,
+            submittedAt=""
+        )
+
+    # Validate additional context
+    if not request.additionalContext.strip():
+        return DeveloperContextResponse(
+            success=False,
+            message="additionalContext cannot be empty",
+            ticketKey=ticket_key,
+            submittedAt=""
+        )
+
+    # Store submission
+    context = {
+        "ticketKey": ticket_key,
+        "userEmail": request.userEmail,
+        "additionalContext": request.additionalContext,
+        "repoPath": request.repoPath,
+        "branchName": request.branchName,
+        "notes": request.notes,
+        "submittedAt": datetime.now().isoformat()
+    }
+
+    if ticket_key not in developer_contexts:
+        developer_contexts[ticket_key] = []
+
+    developer_contexts[ticket_key].append(context)
+
+    logger.info(
+        f"Developer context submitted | "
+        f"Ticket={ticket_key} | "
+        f"User={request.userEmail}"
+    )
+
+    return DeveloperContextResponse(
+        success=True,
+        message="Developer context submitted successfully",
+        ticketKey=ticket_key,
+        submittedAt=context["submittedAt"]
+    )

@@ -6,3 +6,13 @@ class MockTicketResponse(BaseModel):
     broadcast_attempted: bool
     connected_clients: int
     ticket_event: JiraTicketEvent
+
+
+# -------------------------------
+# Task 5 Response Model
+# -------------------------------
+class DeveloperContextResponse(BaseModel):
+    success: bool
+    message: str
+    ticketKey: str
+    submittedAt: str
