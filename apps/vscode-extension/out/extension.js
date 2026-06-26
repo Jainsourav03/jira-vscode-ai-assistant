@@ -36,8 +36,12 @@ function activate(context) {
 ${latestTicket?.ticket_key ?? 'No Ticket'}
 </p>
 
-<p><b>Ticket Title:</b>
+<p><b>Title:</b>
 ${latestTicket?.title ?? 'No Title'}
+</p>
+
+<p><b>Status:</b>
+${latestTicket?.status ?? 'Not Available'}
 </p>
 
 <p><b>Priority:</b>
@@ -48,26 +52,44 @@ ${latestTicket?.priority ?? 'Medium'}
 ${latestTicket?.description ?? 'No Description'}
 </p>
 
-<a href="https://jira.atlassian.com">
+<p><b>Comments:</b>
+${latestTicket?.comments ?? 'No Comments'}
+</p>
+
+<p><b>Assignee Email:</b>
+${latestTicket?.assignee_email ?? 'Unassigned'}
+</p>
+
+<p>
+<b>Jira Link:</b>
+
+<a
+href="${latestTicket?.jira_link ?? 'https://jira.atlassian.com'}"
+>
 Open Jira Ticket
 </a>
 
-<br><br>
+</p>
+
+<br>
 
 <textarea
 id="contextBox"
-placeholder="Additional instructions"
-style="width:100%;height:100px;"
+placeholder="Additional context"
+style="width:100%;height:120px;"
 ></textarea>
 
 <br><br>
+
+<button id="submitBtn">
+Submit Context
+</button>
 
 <button id="runBtn">
 Run AI
 </button>
 
 <div id="result"></div>
-
 <script>
 
 const vscode =
@@ -97,6 +119,29 @@ document
 .getElementById("result")
 .innerText =
 "AI integration will be added in a later phase.";
+
+}
+);
+document
+.getElementById(
+"submitBtn"
+)
+.addEventListener(
+"click",
+function(){
+
+const text =
+document
+.getElementById(
+"contextBox"
+).value;
+
+document
+.getElementById(
+"result"
+).innerText =
+"Context submitted: " +
+text;
 
 }
 );
@@ -198,8 +243,12 @@ box.focus();
                     latestTicket = {
                         ticket_key: message.ticket_key,
                         title: message.ticket_title,
+                        status: message.ticket_status,
                         priority: message.ticket_priority,
-                        description: message.ticket_description
+                        description: message.ticket_description,
+                        comments: message.comments,
+                        jira_link: message.jira_link,
+                        assignee_email: message.assignee_email
                     };
                     const action = await vscode.window.showInformationMessage(`New Jira ticket assigned:
 ${latestTicket.ticket_key}
