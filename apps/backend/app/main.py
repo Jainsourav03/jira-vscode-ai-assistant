@@ -86,6 +86,53 @@ async def send_ticket_to_clients(ticket=None):
            await client["websocket"].send_json(ticket.model_dump())
            client["last_seen"] = datetime.now().isoformat()
            logger.info(f"Ticket sent to {email}")
+
+# -------------------------------
+# Send Ticket Only To Assigned Developer
+# -------------------------------
+async def send_ticket_to_assignee(ticket):
+    assignee_email = ticket.assignee_email
+
+    logger.info(
+        f"Looking for connected client of {assignee_email}"
+    )
+
+    matched_clients = clients_by_email.get(assignee_email, [])
+
+    if len(matched_clients) == 0:
+        logger.info(
+            f"No active VS Code client found for {assignee_email}"
+        )
+        return 0
+
+    disconnected_clients = []
+
+    for client in matched_clients:
+        try:
+            await client["websocket"].send_json(
+                ticket.model_dump()
+            )
+
+            client["last_seen"] = (
+                datetime.now().isoformat()
+            )
+
+            logger.info(
+                f"Ticket sent to {assignee_email} "
+                f"(Client ID: {client['client_id']})"
+            )
+
+        except Exception:
+            disconnected_clients.append(client)
+
+    for client in disconnected_clients:
+        matched_clients.remove(client)
+
+    if len(matched_clients) == 0:
+        clients_by_email.pop(assignee_email, None)
+
+    return len(matched_clients)
+
 # -------------------------------
 # WebSocket Endpoint
 # -------------------------------
@@ -164,17 +211,29 @@ def health_check():
 # -------------------------------
 
 
-@app.post("/dev/mock-ticket", response_model=MockTicketResponse)
-async def get_mock_ticket(request: MockTicketRequest | None = None):
+@app.post("/dev/mock-ticket")
+async def get_mock_ticket(
+    request: MockTicketRequest | None = None
+):
 
+    ticket = create_mock_ticket(request)
 
-   ticket = create_mock_ticket(request)
-   await send_ticket_to_clients(ticket)
-   return MockTicketResponse(
-       broadcast_attempted=True,
-       connected_clients=sum(
-           len(value)
-           for value in clients_by_email.values()
-       ),
-       ticket_event=ticket
-   )
+    matched_clients = await send_ticket_to_assignee(ticket)
+
+    if matched_clients == 0:
+        return {
+            "broadcastAttempted": True,
+            "deliveryType": "targeted",
+            "assigneeEmail": ticket.assignee_email,
+            "matchedClients": 0,
+            "message":
+                "No active VS Code client found for assignee"
+        }
+
+    return {
+        "broadcastAttempted": True,
+        "deliveryType": "targeted",
+        "assigneeEmail": ticket.assignee_email,
+        "matchedClients": matched_clients,
+        "ticketKey": ticket.ticket_key
+    }
