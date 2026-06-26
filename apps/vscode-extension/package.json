@@ -8,6 +8,7 @@
   },
   "main": "./out/extension.js",
   "activationEvents": [
+    "onStartupFinished",
     "onCommand:jira-assistant.hello",
     "onCommand:jira-assistant.openPanel",
     "onCommand:jira-assistant.mockTicket",

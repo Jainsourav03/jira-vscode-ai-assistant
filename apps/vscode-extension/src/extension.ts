@@ -5,6 +5,7 @@ let latestTicket: any;
 let socket: WebSocket | undefined;
 let connectionStatus =
 'Disconnected';
+let currentPanel: any;
 
 export function activate(context: vscode.ExtensionContext) {
 
@@ -19,9 +20,9 @@ export function activate(context: vscode.ExtensionContext) {
 
 	const openPanel = vscode.commands.registerCommand(
 		'jira-assistant.openPanel',
-		() => {
+		async () => {
 
-			const panel = vscode.window.createWebviewPanel(
+			currentPanel = vscode.window.createWebviewPanel(
 				'jiraAssistant',
 				'Jira Assistant - Ticket',
 				vscode.ViewColumn.One,
@@ -29,8 +30,27 @@ export function activate(context: vscode.ExtensionContext) {
 					enableScripts: true
 				}
 			);
+			currentPanel.webview.onDidReceiveMessage(
+(message:any)=>{
 
-			panel.webview.html = `
+if(
+message.type===
+'webviewReady'
+){
+
+currentPanel?.webview.postMessage({
+
+type:
+'focusContext'
+
+});
+
+}
+
+}
+);
+
+			currentPanel.webview.html = `
 <!DOCTYPE html>
 <html>
 
@@ -61,6 +81,7 @@ Open Jira Ticket
 <br><br>
 
 <textarea
+id="contextBox"
 placeholder="Additional instructions"
 style="width:100%;height:100px;"
 ></textarea>
@@ -74,6 +95,23 @@ Run AI
 <div id="result"></div>
 
 <script>
+
+const vscode =
+acquireVsCodeApi();
+
+/* Tell extension webview finished loading */
+
+window.onload =
+()=>{
+
+vscode.postMessage({
+
+type:
+'webviewReady'
+
+});
+
+};
 
 document
 .getElementById("runBtn")
@@ -89,11 +127,38 @@ document
 }
 );
 
-</script>
+/* Receive messages */
 
+window.addEventListener(
+'message',
+(event)=>{
+
+if(
+event.data.type===
+'focusContext'
+){
+
+const box =
+document.getElementById(
+'contextBox'
+);
+
+if(box){
+
+box.focus();
+
+}
+
+}
+
+}
+);
+
+</script>
 </body>
 </html>
 `;
+return currentPanel;
 		}
 	);
 
@@ -105,18 +170,46 @@ document
 			await vscode.window.showInformationMessage(
 				'New Jira ticket assigned: PROJ-123 - Fix login redirect issue',
 				'Open Ticket',
+				'Add Context',	
 				'Ignore'
 			);
 
 			if(action==='Open Ticket'){
 
-				vscode.window.showInformationMessage(
-					'Opening ticket...'
+				await vscode.commands.executeCommand(
+					'jira-assistant.openPanel'
 				);
 
 			}
+			else if(
+action==='Add Context'
+){
+
+await vscode.commands.executeCommand(
+'jira-assistant.openPanel'
+);
+
+setTimeout(
+()=>{
+
+currentPanel.webview.postMessage({
+
+type:
+'focusContext'
+
+});
+
+},
+500
+);
+
+}
+			else{
+				return;
+			}
 
 		}
+	
 	);
 
 	const config =
@@ -192,6 +285,7 @@ clientId
 }
 );
 
+
 socket.on(
 'message',
 async (data)=>{
@@ -203,7 +297,7 @@ JSON.parse(
 data.toString()
 );
 
-/* Registration acknowledgement */
+/* Registration */
 
 if(
 message.type===
@@ -220,6 +314,7 @@ vscode.window.showInformationMessage(
 );
 
 }
+
 else{
 
 connectionStatus =
@@ -235,7 +330,8 @@ return;
 
 }
 
-/* Ticket messages */
+
+/* Ticket */
 
 if(
 message.ticket_key &&
@@ -264,10 +360,11 @@ await vscode.window.showInformationMessage(
 `New Jira ticket assigned:
 ${latestTicket.ticket_key}
 
-
 ${latestTicket.title}`,
 
-'Open Ticket'
+'Open Ticket',
+'Add Context',
+'Ignore'
 
 );
 
@@ -281,21 +378,32 @@ await vscode.commands.executeCommand(
 
 }
 
+else if(
+action==='Add Context'
+){
+
+await vscode.commands.executeCommand(
+'jira-assistant.openPanel'
+);
+
+await vscode.window.showInformationMessage(
+'Enter additional context below'
+);
+
+}
+
+return;
+
 }
 
 
-
-else{
+/* Unknown */
 
 vscode.window.showWarningMessage(
 'Unknown backend event'
 );
 
 }
-
-}
-
-
 
 catch{
 
@@ -309,14 +417,31 @@ vscode.window.showErrorMessage(
 );
 
 
+
 socket.on(
 'close',
 ()=>{
-	connectionStatus =
+
+connectionStatus =
 'Disconnected';
 
-vscode.window.showWarningMessage(
-'Connection closed'
+
+
+setTimeout(
+()=>{
+
+if(
+socket?.readyState ===
+WebSocket.CLOSED
+){
+
+socket =
+undefined;
+
+}
+
+},
+300
 );
 
 }
@@ -325,10 +450,12 @@ vscode.window.showWarningMessage(
 socket.on(
 'error',
 ()=>{
-	connectionStatus = 'Backend unavailable';
 
-vscode.window.showErrorMessage(
-connectionStatus
+connectionStatus =
+'Backend unavailable';
+
+vscode.window.showWarningMessage(
+'Backend unavailable'
 );
 
 }
@@ -356,6 +483,18 @@ connectionStatus
 		connectBackend,
 		showConnectionStatus
 	);
+	
+
+setTimeout(
+()=>{
+
+vscode.commands.executeCommand(
+'jira-assistant.connectBackend'
+);
+
+},
+1000
+);
 
 }
 

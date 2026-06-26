@@ -7,15 +7,24 @@ const WebSocket = require("ws");
 let latestTicket;
 let socket;
 let connectionStatus = 'Disconnected';
+let currentPanel;
 function activate(context) {
     const hello = vscode.commands.registerCommand('jira-assistant.hello', () => {
         vscode.window.showInformationMessage('Hello from Jira Assistant!');
     });
-    const openPanel = vscode.commands.registerCommand('jira-assistant.openPanel', () => {
-        const panel = vscode.window.createWebviewPanel('jiraAssistant', 'Jira Assistant - Ticket', vscode.ViewColumn.One, {
+    const openPanel = vscode.commands.registerCommand('jira-assistant.openPanel', async () => {
+        currentPanel = vscode.window.createWebviewPanel('jiraAssistant', 'Jira Assistant - Ticket', vscode.ViewColumn.One, {
             enableScripts: true
         });
-        panel.webview.html = `
+        currentPanel.webview.onDidReceiveMessage((message) => {
+            if (message.type ===
+                'webviewReady') {
+                currentPanel?.webview.postMessage({
+                    type: 'focusContext'
+                });
+            }
+        });
+        currentPanel.webview.html = `
 <!DOCTYPE html>
 <html>
 
@@ -46,6 +55,7 @@ Open Jira Ticket
 <br><br>
 
 <textarea
+id="contextBox"
 placeholder="Additional instructions"
 style="width:100%;height:100px;"
 ></textarea>
@@ -59,6 +69,23 @@ Run AI
 <div id="result"></div>
 
 <script>
+
+const vscode =
+acquireVsCodeApi();
+
+/* Tell extension webview finished loading */
+
+window.onload =
+()=>{
+
+vscode.postMessage({
+
+type:
+'webviewReady'
+
+});
+
+};
 
 document
 .getElementById("runBtn")
@@ -74,16 +101,54 @@ document
 }
 );
 
-</script>
+/* Receive messages */
 
+window.addEventListener(
+'message',
+(event)=>{
+
+if(
+event.data.type===
+'focusContext'
+){
+
+const box =
+document.getElementById(
+'contextBox'
+);
+
+if(box){
+
+box.focus();
+
+}
+
+}
+
+}
+);
+
+</script>
 </body>
 </html>
 `;
+        return currentPanel;
     });
     const mockTicket = vscode.commands.registerCommand('jira-assistant.mockTicket', async () => {
-        const action = await vscode.window.showInformationMessage('New Jira ticket assigned: PROJ-123 - Fix login redirect issue', 'Open Ticket', 'Ignore');
+        const action = await vscode.window.showInformationMessage('New Jira ticket assigned: PROJ-123 - Fix login redirect issue', 'Open Ticket', 'Add Context', 'Ignore');
         if (action === 'Open Ticket') {
-            vscode.window.showInformationMessage('Opening ticket...');
+            await vscode.commands.executeCommand('jira-assistant.openPanel');
+        }
+        else if (action === 'Add Context') {
+            await vscode.commands.executeCommand('jira-assistant.openPanel');
+            setTimeout(() => {
+                currentPanel.webview.postMessage({
+                    type: 'focusContext'
+                });
+            }, 500);
+        }
+        else {
+            return;
         }
     });
     const config = vscode.workspace.getConfiguration('jiraAssistant');
@@ -113,7 +178,7 @@ document
         socket.on('message', async (data) => {
             try {
                 const message = JSON.parse(data.toString());
-                /* Registration acknowledgement */
+                /* Registration */
                 if (message.type ===
                     'client_registered') {
                     if (message.status ===
@@ -127,7 +192,7 @@ document
                     }
                     return;
                 }
-                /* Ticket messages */
+                /* Ticket */
                 if (message.ticket_key &&
                     message.ticket_title) {
                     latestTicket = {
@@ -139,15 +204,18 @@ document
                     const action = await vscode.window.showInformationMessage(`New Jira ticket assigned:
 ${latestTicket.ticket_key}
 
-
-${latestTicket.title}`, 'Open Ticket');
+${latestTicket.title}`, 'Open Ticket', 'Add Context', 'Ignore');
                     if (action === 'Open Ticket') {
                         await vscode.commands.executeCommand('jira-assistant.openPanel');
                     }
+                    else if (action === 'Add Context') {
+                        await vscode.commands.executeCommand('jira-assistant.openPanel');
+                        await vscode.window.showInformationMessage('Enter additional context below');
+                    }
+                    return;
                 }
-                else {
-                    vscode.window.showWarningMessage('Unknown backend event');
-                }
+                /* Unknown */
+                vscode.window.showWarningMessage('Unknown backend event');
             }
             catch {
                 vscode.window.showErrorMessage('Invalid backend JSON');
@@ -156,17 +224,27 @@ ${latestTicket.title}`, 'Open Ticket');
         socket.on('close', () => {
             connectionStatus =
                 'Disconnected';
-            vscode.window.showWarningMessage('Connection closed');
+            setTimeout(() => {
+                if (socket?.readyState ===
+                    WebSocket.CLOSED) {
+                    socket =
+                        undefined;
+                }
+            }, 300);
         });
         socket.on('error', () => {
-            connectionStatus = 'Backend unavailable';
-            vscode.window.showErrorMessage(connectionStatus);
+            connectionStatus =
+                'Backend unavailable';
+            vscode.window.showWarningMessage('Backend unavailable');
         });
     });
     const showConnectionStatus = vscode.commands.registerCommand('jira-assistant.showConnectionStatus', () => {
         vscode.window.showInformationMessage(connectionStatus);
     });
     context.subscriptions.push(hello, openPanel, mockTicket, connectBackend, showConnectionStatus);
+    setTimeout(() => {
+        vscode.commands.executeCommand('jira-assistant.connectBackend');
+    }, 1000);
 }
 function deactivate() { }
 //# sourceMappingURL=extension.js.map
