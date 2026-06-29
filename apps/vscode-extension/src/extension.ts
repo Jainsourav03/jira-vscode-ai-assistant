@@ -3,8 +3,12 @@ import WebSocket = require('ws');
 
 let latestTicket: any;
 let socket: WebSocket | undefined;
-let connectionStatus =
-'Disconnected';
+let connectionStatus:
+'connected' |
+'disconnected' |
+'connecting' =
+'disconnected';
+
 let currentPanel: any;
 
 export function activate(context: vscode.ExtensionContext) {
@@ -283,6 +287,27 @@ box.focus();
 return currentPanel;
 		}
 	);
+	const openLatestTicket =
+vscode.commands.registerCommand(
+'jira-assistant.openLatestTicket',
+async ()=>{
+
+if(!latestTicket){
+
+vscode.window.showInformationMessage(
+'No Jira ticket received yet.'
+);
+
+return;
+
+}
+
+await vscode.commands.executeCommand(
+'jira-assistant.openPanel'
+);
+
+}
+);
 
 	const mockTicket = vscode.commands.registerCommand(
 		'jira-assistant.mockTicket',
@@ -368,7 +393,7 @@ socket.close();
 
 }
 connectionStatus =
-'Connecting...';
+'connecting';
 socket =
 new WebSocket(
 websocketUrl!
@@ -379,7 +404,7 @@ socket.on(
 () => {
 
 connectionStatus =
-`Connected as ${userEmail}`;
+`connected`;
 
 vscode.window.showInformationMessage(
 connectionStatus
@@ -440,7 +465,7 @@ vscode.window.showInformationMessage(
 else{
 
 connectionStatus =
-'Registration failed';
+'disconnected';
 
 vscode.window.showErrorMessage(
 connectionStatus
@@ -556,7 +581,7 @@ socket.on(
 ()=>{
 
 connectionStatus =
-'Disconnected';
+'disconnected';
 
 
 
@@ -585,7 +610,7 @@ socket.on(
 ()=>{
 
 connectionStatus =
-'Backend unavailable';
+'disconnected';
 
 vscode.window.showWarningMessage(
 'Backend unavailable'

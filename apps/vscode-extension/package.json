@@ -12,7 +12,8 @@
     "onCommand:jira-assistant.hello",
     "onCommand:jira-assistant.openPanel",
     "onCommand:jira-assistant.mockTicket",
-    "onCommand:jira-assistant.connectBackend"
+    "onCommand:jira-assistant.connectBackend",
+    "onCommand:jira-assistant.openLatestTicket"
   ],
   "contributes": {
   "commands": [
@@ -32,6 +33,13 @@
       "command": "jira-assistant.connectBackend",
       "title": "Jira Assistant: Connect Backend"
     },
+    {
+"command":
+"jira-assistant.openLatestTicket",
+
+"title":
+"Jira Assistant: Open Latest Ticket"
+},
     {
   "command": "jira-assistant.showConnectionStatus",
   "title": "Jira Assistant: Show Connection Status"

@@ -6,7 +6,7 @@ const vscode = require("vscode");
 const WebSocket = require("ws");
 let latestTicket;
 let socket;
-let connectionStatus = 'Disconnected';
+let connectionStatus = 'disconnected';
 let currentPanel;
 function activate(context) {
     const hello = vscode.commands.registerCommand('jira-assistant.hello', () => {
@@ -207,6 +207,13 @@ box.focus();
 `;
         return currentPanel;
     });
+    const openLatestTicket = vscode.commands.registerCommand('jira-assistant.openLatestTicket', async () => {
+        if (!latestTicket) {
+            vscode.window.showInformationMessage('No Jira ticket received yet.');
+            return;
+        }
+        await vscode.commands.executeCommand('jira-assistant.openPanel');
+    });
     const mockTicket = vscode.commands.registerCommand('jira-assistant.mockTicket', async () => {
         const action = await vscode.window.showInformationMessage('New Jira ticket assigned: PROJ-123 - Fix login redirect issue', 'Open Ticket', 'Add Context', 'Ignore');
         if (action === 'Open Ticket') {
@@ -234,12 +241,12 @@ box.focus();
             socket.close();
         }
         connectionStatus =
-            'Connecting...';
+            'connecting';
         socket =
             new WebSocket(websocketUrl);
         socket.on('open', () => {
             connectionStatus =
-                `Connected as ${userEmail}`;
+                `connected`;
             vscode.window.showInformationMessage(connectionStatus);
             /* Register client */
             socket.send(JSON.stringify({
@@ -260,7 +267,7 @@ box.focus();
                     }
                     else {
                         connectionStatus =
-                            'Registration failed';
+                            'disconnected';
                         vscode.window.showErrorMessage(connectionStatus);
                     }
                     return;
@@ -300,7 +307,7 @@ ${latestTicket.title}`, 'Open Ticket', 'Add Context', 'Ignore');
         });
         socket.on('close', () => {
             connectionStatus =
-                'Disconnected';
+                'disconnected';
             setTimeout(() => {
                 if (socket?.readyState ===
                     WebSocket.CLOSED) {
@@ -311,7 +318,7 @@ ${latestTicket.title}`, 'Open Ticket', 'Add Context', 'Ignore');
         });
         socket.on('error', () => {
             connectionStatus =
-                'Backend unavailable';
+                'disconnected';
             vscode.window.showWarningMessage('Backend unavailable');
         });
     });
