@@ -165,6 +165,8 @@ document
 ).value;
 vscode.postMessage({
 type:'submitContext',
+ticketKey:
+"${latestTicket?.ticket_key}",
 additionalContext:text
 });
 }		
