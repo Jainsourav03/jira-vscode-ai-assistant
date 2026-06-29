@@ -24,6 +24,34 @@ function activate(context) {
                 });
             }
         });
+        currentPanel.webview.onDidReceiveMessage(async (message) => {
+            if (message.type ===
+                'submitContext') {
+                try {
+                    const response = await fetch(`${backendUrl}/tickets/${latestTicket?.ticket_key}/developer-context`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            userEmail: userEmail,
+                            additionalContext: message.additionalContext,
+                            repoPath: vscode.workspace.workspaceFolders?.[0]
+                                ?.uri.fsPath
+                        })
+                    });
+                    if (response.ok) {
+                        vscode.window.showInformationMessage('Context submitted successfully');
+                    }
+                    else {
+                        vscode.window.showErrorMessage('Backend rejected context');
+                    }
+                }
+                catch {
+                    vscode.window.showErrorMessage('Failed to submit context');
+                }
+            }
+        });
         currentPanel.webview.html = `
 <!DOCTYPE html>
 <html>
@@ -135,16 +163,14 @@ document
 .getElementById(
 "contextBox"
 ).value;
-
-document
-.getElementById(
-"result"
-).innerText =
-"Context submitted: " +
-text;
-
-}
+vscode.postMessage({
+type:'submitContext',
+additionalContext:text
+});
+}		
 );
+
+
 
 /* Receive messages */
 
