@@ -7,10 +7,8 @@ class MockTicketResponse(BaseModel):
     connected_clients: int
     ticket_event: JiraTicketEvent
 
+# Response Model
 
-# -------------------------------
-# Task 5 Response Model
-# -------------------------------
 class DeveloperContextResponse(BaseModel):
     success: bool
     message: str
