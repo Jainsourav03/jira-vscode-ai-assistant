@@ -234,6 +234,8 @@ box.focus();
     const config = vscode.workspace.getConfiguration('jiraAssistant');
     const backendUrl = config.get('backendUrl');
     const websocketUrl = config.get('websocketUrl');
+    const autoConnect = config.get('autoConnect');
+    const showNotifications = config.get('showNotifications');
     const userEmail = config.get('userEmail');
     const clientId = `vscode-client-${Date.now()}`;
     const connectBackend = vscode.commands.registerCommand('jira-assistant.connectBackend', () => {

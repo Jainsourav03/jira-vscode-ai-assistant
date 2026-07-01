@@ -373,7 +373,15 @@ type:
 	config.get<string>(
 		'websocketUrl'
 	);
+const autoConnect =
+config.get<boolean>(
+'autoConnect'
+);
 
+const showNotifications =
+config.get<boolean>(
+'showNotifications'
+);
 	const userEmail =
 	config.get<string>(
 		'userEmail'

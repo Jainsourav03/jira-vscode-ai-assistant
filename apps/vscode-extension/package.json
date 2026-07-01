@@ -46,28 +46,43 @@
 }
   ],
 
-  "configuration": {
-    "title": "Jira Assistant",
+ "configuration": {
+  "title": "Jira Assistant",
 
-    "properties": {
+  "properties": {
 
-      "jiraAssistant.backendUrl": {
-        "type": "string",
-        "default": "http://localhost:8000"
-      },
+    "jiraAssistant.backendUrl": {
+      "type": "string",
+      "default": "http://localhost:8000",
+      "description": "Backend REST API URL"
+    },
 
-      "jiraAssistant.websocketUrl": {
-        "type": "string",
-        "default": "ws://localhost:8000/ws/client"
-      },
+    "jiraAssistant.websocketUrl": {
+      "type": "string",
+      "default": "ws://localhost:8000/ws/client",
+      "description": "Backend WebSocket URL"
+    },
 
-      "jiraAssistant.userEmail": {
-        "type": "string",
-        "default": "developer@example.com"
-      }
+    "jiraAssistant.userEmail": {
+      "type": "string",
+      "default": "developer@example.com",
+      "description": "Developer email"
+    },
 
+    "jiraAssistant.autoConnect": {
+      "type": "boolean",
+      "default": true,
+      "description": "Automatically connect to backend"
+    },
+
+    "jiraAssistant.showNotifications": {
+      "type": "boolean",
+      "default": true,
+      "description": "Show Jira ticket notifications"
     }
+
   }
+}
 },
   "scripts": {
     "compile": "tsc -p .",
