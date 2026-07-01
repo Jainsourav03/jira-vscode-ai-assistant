@@ -4,6 +4,7 @@ from app.models import (JiraTicketEvent, DeveloperContextRequest, ClientRegistra
 from app.response_models import (DeveloperContextResponse)
 import logging
 from datetime import datetime
+from app.config import settings
 
 
 logging.basicConfig(level=logging.INFO)
@@ -52,7 +53,7 @@ def create_mock_ticket(data=None):
         ticket_description= "Users are redirected to wrong page after login.",
         ticket_status="To Do",
         ticket_priority="High",
-        ticket_url= f"https://jira.example.com/browse/{ticket_key}",
+        ticket_url=(f"{settings.BACKEND_PUBLIC_URL}"f"/browse/{ticket_key}"),
         comments=["Issue reported by QA team.", "Needs investigation."],
         assignee_email=assignee_email
     )
@@ -178,9 +179,9 @@ def get_connected_clients():
 def health_check():
 
     return {
-        "service":"jira-vscode-assistant-backend",
+      "service":"jira-vscode-assistant-backend",
       "status":"healthy",
-      "message":"Backend is running"
+      "environment":settings.APP_ENV
 
     }
 
