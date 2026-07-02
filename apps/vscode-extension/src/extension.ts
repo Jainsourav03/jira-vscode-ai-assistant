@@ -411,9 +411,25 @@ vscode.commands.registerCommand(
 'jira-assistant.connectBackend',
 () => {
 
-if(socket){
+if (socket) {
 
-socket.close();
+    if (socket.readyState === WebSocket.OPEN) {
+
+        vscode.window.showInformationMessage(
+            'Already connected to backend.'
+        );
+
+        return;
+    }
+
+    if (socket.readyState === WebSocket.CONNECTING) {
+
+        vscode.window.showInformationMessage(
+            'Connection is already in progress.'
+        );
+
+        return;
+    }
 
 }
 connectionStatus =
@@ -449,7 +465,26 @@ vscode.window.showErrorMessage(
 return;
 
 }
-socket = new WebSocket(websocketUrl!);
+
+if (
+	!websocketUrl ||
+	(
+		!websocketUrl.startsWith('ws://') &&
+		!websocketUrl.startsWith('wss://')
+	)
+) {
+
+	connectionStatus = 'disconnected';
+
+	vscode.window.showErrorMessage(
+		'Invalid WebSocket URL.'
+	);
+
+	return;
+
+}
+
+socket = new WebSocket(websocketUrl);
 
 
 socket.on(
@@ -630,34 +665,19 @@ vscode.window.showErrorMessage(
 
 
 socket.on(
-'close',
-()=>{
+    'close',
+    () => {
 
-connectionStatus =
-'disconnected';
+        connectionStatus = 'disconnected';
 
+        socket = undefined;
 
+        vscode.window.showWarningMessage(
+            'Connection closed.'
+        );
 
-setTimeout(
-()=>{
-
-if(
-socket?.readyState ===
-WebSocket.CLOSED
-){
-
-socket =
-undefined;
-
-}
-
-},
-300
+    }
 );
-
-}
-);
-
 socket.on(
 'error',
 ()=>{
@@ -687,25 +707,32 @@ connectionStatus
 
 }
 );
-	context.subscriptions.push(
-		hello,
-		openPanel,
-		mockTicket,
-		connectBackend,
-		showConnectionStatus
+context.subscriptions.push(
+	hello,
+	openPanel,
+	mockTicket,
+	connectBackend,
+	showConnectionStatus
+);
+
+if (
+	autoConnect &&
+	userEmail &&
+	userEmail.trim() !== ''
+) {
+
+	setTimeout(
+	()=>{
+
+		vscode.commands.executeCommand(
+			'jira-assistant.connectBackend'
+		);
+
+	},
+	1000
 	);
-	
 
-setTimeout(
-()=>{
-
-vscode.commands.executeCommand(
-'jira-assistant.connectBackend'
-);
-
-},
-1000
-);
+}
 
 }
 

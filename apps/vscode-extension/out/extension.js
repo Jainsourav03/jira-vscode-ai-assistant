@@ -245,7 +245,14 @@ box.focus();
     const userEmail = config.get('userEmail');
     const connectBackend = vscode.commands.registerCommand('jira-assistant.connectBackend', () => {
         if (socket) {
-            socket.close();
+            if (socket.readyState === WebSocket.OPEN) {
+                vscode.window.showInformationMessage('Already connected to backend.');
+                return;
+            }
+            if (socket.readyState === WebSocket.CONNECTING) {
+                vscode.window.showInformationMessage('Connection is already in progress.');
+                return;
+            }
         }
         connectionStatus =
             'connecting';
@@ -259,6 +266,13 @@ box.focus();
         }
         if (!userEmail || userEmail.trim() === '') {
             vscode.window.showErrorMessage('Please configure jiraAssistant.userEmail before connecting.');
+            return;
+        }
+        if (!websocketUrl ||
+            (!websocketUrl.startsWith('ws://') &&
+                !websocketUrl.startsWith('wss://'))) {
+            connectionStatus = 'disconnected';
+            vscode.window.showErrorMessage('Invalid WebSocket URL.');
             return;
         }
         socket = new WebSocket(websocketUrl);
@@ -324,15 +338,9 @@ ${latestTicket.title}`, 'Open Ticket', 'Add Context', 'Ignore');
             }
         });
         socket.on('close', () => {
-            connectionStatus =
-                'disconnected';
-            setTimeout(() => {
-                if (socket?.readyState ===
-                    WebSocket.CLOSED) {
-                    socket =
-                        undefined;
-                }
-            }, 300);
+            connectionStatus = 'disconnected';
+            socket = undefined;
+            vscode.window.showWarningMessage('Connection closed.');
         });
         socket.on('error', () => {
             connectionStatus =
@@ -344,9 +352,13 @@ ${latestTicket.title}`, 'Open Ticket', 'Add Context', 'Ignore');
         vscode.window.showInformationMessage(connectionStatus);
     });
     context.subscriptions.push(hello, openPanel, mockTicket, connectBackend, showConnectionStatus);
-    setTimeout(() => {
-        vscode.commands.executeCommand('jira-assistant.connectBackend');
-    }, 1000);
+    if (autoConnect &&
+        userEmail &&
+        userEmail.trim() !== '') {
+        setTimeout(() => {
+            vscode.commands.executeCommand('jira-assistant.connectBackend');
+        }, 1000);
+    }
 }
 function deactivate() { }
 //# sourceMappingURL=extension.js.map
