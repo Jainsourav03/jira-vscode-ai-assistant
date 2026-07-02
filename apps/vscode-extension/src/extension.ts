@@ -13,6 +13,23 @@ let currentPanel: any;
 
 export function activate(context: vscode.ExtensionContext) {
 
+	let clientId =
+	context.globalState.get<string>(
+		'clientId'
+	);
+
+	if(!clientId){
+
+		clientId =
+		`vscode-client-${Date.now()}`;
+
+		context.globalState.update(
+			'clientId',
+			clientId
+		);
+
+	}
+
 	const hello = vscode.commands.registerCommand(
 		'jira-assistant.hello',
 		() => {
@@ -387,8 +404,7 @@ config.get<boolean>(
 		'userEmail'
 	);
 
-	const clientId =
-`vscode-client-${Date.now()}`;
+	
 
 const connectBackend =
 vscode.commands.registerCommand(

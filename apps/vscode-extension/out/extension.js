@@ -9,6 +9,12 @@ let socket;
 let connectionStatus = 'disconnected';
 let currentPanel;
 function activate(context) {
+    let clientId = context.globalState.get('clientId');
+    if (!clientId) {
+        clientId =
+            `vscode-client-${Date.now()}`;
+        context.globalState.update('clientId', clientId);
+    }
     const hello = vscode.commands.registerCommand('jira-assistant.hello', () => {
         vscode.window.showInformationMessage('Hello from Jira Assistant!');
     });
@@ -237,7 +243,6 @@ box.focus();
     const autoConnect = config.get('autoConnect');
     const showNotifications = config.get('showNotifications');
     const userEmail = config.get('userEmail');
-    const clientId = `vscode-client-${Date.now()}`;
     const connectBackend = vscode.commands.registerCommand('jira-assistant.connectBackend', () => {
         if (socket) {
             socket.close();
