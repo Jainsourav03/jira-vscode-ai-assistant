@@ -1,7 +1,8 @@
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Header
 from pydantic import BaseModel, Field
-from app.models import (JiraTicketEvent, DeveloperContextRequest, ClientRegistrationRequest)
+from app.models import (JiraTicketEvent, DeveloperContextRequest, ClientRegistrationRequest, )
 from app.response_models import (DeveloperContextResponse)
+from app.models import JiraWebhookPayload
 import logging
 from datetime import datetime
 from app.config import settings
@@ -65,6 +66,14 @@ def register_client(email, client_id, websocket):
 
     if email not in clients_by_email:
         clients_by_email[email] = []
+
+    # Prevent duplicate client registration
+    for client in clients_by_email[email]:
+        if client["client_id"] == client_id:
+            client["websocket"] = websocket
+            client["last_seen"] = datetime.now().isoformat()
+            return
+
     clients_by_email[email].append(
         {
             "client_id": client_id,
@@ -74,25 +83,35 @@ def register_client(email, client_id, websocket):
         }
     )
 
-    logger.info(
-       f"Client registered successfully | "
-       f"Email: {email} | "
-       f"Client ID: {client_id}"
-   )
+    logger.info(f"{email} -> {client_id} registered")
 
 # Send Ticket
 
 async def send_ticket_to_clients(ticket):
+    email = ticket.assignee_email
 
-    for email, clients in clients_by_email.items():
-        for client in clients:
-            try:
-                await client["websocket"].send_json(ticket.model_dump())
-                client["last_seen"] = (datetime.now().isoformat())
-                logger.info(f"Ticket sent to {email}")
+    if email not in clients_by_email:
+        logger.info(f"No connected client for {email}")
+        return
 
-            except Exception as e:
-                logger.error(str(e))
+    dead_clients = []
+
+    for client in clients_by_email[email]:
+        try:
+            await client["websocket"].send_json(ticket.model_dump())
+            client["last_seen"] = datetime.now().isoformat()
+            logger.info(f"Ticket sent to {email} ({client['client_id']})")
+
+        except Exception as e:
+            logger.error(str(e))
+            dead_clients.append(client)
+
+    # Remove dead sockets
+
+    for client in dead_clients:
+        clients_by_email[email].remove(client)
+    if email in clients_by_email and len(clients_by_email[email]) == 0:
+        del clients_by_email[email]
 
 # WebSocket Endpoint
 
@@ -169,8 +188,17 @@ def get_connected_clients():
 
     for email, clients in clients_by_email.items():
         response[email] = {
-            "active_clients": len(clients)
+            "active_clients": len(clients),
+            "clients": [
+                {
+                    "clientId": client["client_id"],
+                    "connectedAt": client["connected_at"],
+                    "lastSeen": client["last_seen"]
+                }
+                for client in clients
+            ]
         }
+
     return response
 
 # Health Check
@@ -183,6 +211,82 @@ def health_check():
       "status":"healthy",
       "environment":settings.APP_ENV
 
+    }
+
+@app.post("/webhooks/jira/assigned")
+async def jira_assignment_webhook(
+    payload: JiraWebhookPayload,
+    x_jira_webhook_secret: str | None = Header(default=None)
+):
+
+    # Validate webhook secret
+    if (
+        x_jira_webhook_secret is None
+        or x_jira_webhook_secret != settings.JIRA_WEBHOOK_SECRET
+    ):
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid Jira webhook secret"
+        )
+
+    # Convert Jira payload to internal ticket event
+    ticket = JiraTicketEvent(
+
+        event_type=payload.eventType,
+
+        ticket_key=payload.issueKey,
+
+        ticket_title=payload.summary,
+
+        ticket_description=payload.description or "",
+
+        ticket_status=payload.status or "",
+
+        ticket_priority=payload.priority or "",
+
+        ticket_url=payload.issueUrl,
+
+        comments=[],
+
+        assignee_email=payload.assigneeEmail or ""
+    )
+
+    # Store ticket history
+    generated_tickets.append(
+        {
+            "key": ticket.ticket_key,
+            "title": ticket.ticket_title,
+            "assigneeEmail": ticket.assignee_email,
+            "status": ticket.ticket_status
+        }
+    )
+
+    # Count connected clients for this assignee
+    matched_clients = len(
+        clients_by_email.get(ticket.assignee_email, [])
+    )
+
+    # Send ticket only to matching developer
+    await send_ticket_to_clients(ticket)
+
+    # Response
+    if matched_clients > 0:
+
+        return {
+            "status": "processed",
+            "ticketKey": ticket.ticket_key,
+            "assigneeEmail": ticket.assignee_email,
+            "matchedClients": matched_clients,
+            "delivered": True
+        }
+
+    return {
+        "status": "processed",
+        "ticketKey": ticket.ticket_key,
+        "assigneeEmail": ticket.assignee_email,
+        "matchedClients": 0,
+        "delivered": False,
+        "message": "No active VS Code client found for assignee"
     }
 
 # Developer Context GET
