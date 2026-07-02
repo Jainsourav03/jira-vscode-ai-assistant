@@ -244,8 +244,19 @@ box.focus();
         }
         connectionStatus =
             'connecting';
-        socket =
-            new WebSocket(websocketUrl);
+        if (!backendUrl) {
+            vscode.window.showErrorMessage('Please configure jiraAssistant.backendUrl before connecting.');
+            return;
+        }
+        if (!websocketUrl) {
+            vscode.window.showErrorMessage('Please configure jiraAssistant.websocketUrl before connecting.');
+            return;
+        }
+        if (!userEmail || userEmail.trim() === '') {
+            vscode.window.showErrorMessage('Please configure jiraAssistant.userEmail before connecting.');
+            return;
+        }
+        socket = new WebSocket(websocketUrl);
         socket.on('open', () => {
             connectionStatus =
                 `connected`;

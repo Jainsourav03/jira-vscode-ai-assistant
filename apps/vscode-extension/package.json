@@ -65,13 +65,13 @@
 
     "jiraAssistant.userEmail": {
       "type": "string",
-      "default": "developer@example.com",
+      "default": "",
       "description": "Developer email"
     },
 
     "jiraAssistant.autoConnect": {
       "type": "boolean",
-      "default": true,
+      "default": false,
       "description": "Automatically connect to backend"
     },
 
