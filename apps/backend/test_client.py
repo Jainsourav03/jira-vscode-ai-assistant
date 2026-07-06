@@ -39,9 +39,10 @@ try:
     while True:
         try:
             message = ws.recv()
+            data = json.loads(message)
 
-            print("\nRAW MESSAGE RECEIVED:")
-            print(message)
+            print("\nMESSAGE RECEIVED:")
+            print(json.dumps(data, indent=2))
 
         except KeyboardInterrupt:
             print("\nClient stopped by user.")

@@ -1,4 +1,5 @@
 from pydantic import BaseModel, Field, model_validator
+from datetime import datetime
 from typing import List
 
 # Jira Ticket Event Model
@@ -44,7 +45,7 @@ class DeveloperContextRequest(BaseModel):
     branchName: str | None = None
     notes: str | None = None
 
-    # --------------------------------------
+# --------------------------------------
 # Task 8 - Jira Webhook Payload
 # --------------------------------------
 
@@ -108,3 +109,41 @@ class JiraWebhookPayload(BaseModel):
             )
 
         return self
+
+# ------------------------------
+# Task 10 - Internal Ticket Event
+# ------------------------------
+
+class InternalTicket(BaseModel):
+    key: str
+    title: str
+    description: str
+    status: str
+    priority: str
+    url: str
+    assigneeEmail: str
+    assigneeDisplayName: str | None = None
+    projectKey: str | None = None
+    comments: list[str] = []
+
+
+class EventMetadata(BaseModel):
+    source: str
+    eventId: str
+    createdAt: str
+
+
+class InternalTicketEvent(BaseModel):
+    type: str
+    ticket: InternalTicket
+    metadata: EventMetadata
+
+# --------------------------------------
+# Task 9 - Assignee Mapping
+# --------------------------------------
+
+class AssigneeMappingRequest(BaseModel):
+
+    accountId: str = Field(..., min_length=1)
+
+    email: str = Field(..., min_length=1)

@@ -1,6 +1,5 @@
 from pydantic import BaseModel
 
-
 class JiraIssueFields(BaseModel):
     summary: str
     description: str | None = ""

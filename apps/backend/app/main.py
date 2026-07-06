@@ -1,8 +1,7 @@
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Header
 from pydantic import BaseModel, Field
-from app.models import (JiraTicketEvent, DeveloperContextRequest, ClientRegistrationRequest, )
+from app.models import (JiraTicketEvent, DeveloperContextRequest, ClientRegistrationRequest, JiraWebhookPayload, AssigneeMappingRequest)
 from app.response_models import (DeveloperContextResponse)
-from app.models import JiraWebhookPayload
 import logging
 from datetime import datetime
 from app.config import settings
@@ -20,6 +19,8 @@ clients_by_email = {}
 developer_contexts = {}
 
 generated_tickets = []
+
+assignee_email_map = {}
 
 # Mock Ticket Request Model
 
@@ -54,11 +55,43 @@ def create_mock_ticket(data=None):
         ticket_description= "Users are redirected to wrong page after login.",
         ticket_status="To Do",
         ticket_priority="High",
-        ticket_url=(f"{settings.BACKEND_PUBLIC_URL}"f"/browse/{ticket_key}"),
+        ticket_url=(f"{settings.BACKEND_PUBLIC_URL}/browse/{ticket_key}"),
         comments=["Issue reported by QA team.", "Needs investigation."],
         assignee_email=assignee_email
     )
     return ticket
+
+#Add a normalization function
+
+def normalize_ticket_event(
+    ticket: JiraTicketEvent,
+    source: str = "mock",
+    assignee_display_name: str | None = None,
+    project_key: str | None = None,
+):
+
+    created_at = datetime.utcnow().isoformat() + "Z"
+
+    return {
+        "type": "ticket_assigned",
+        "ticket": {
+            "key": ticket.ticket_key,
+            "title": ticket.ticket_title,
+            "description": ticket.ticket_description,
+            "status": ticket.ticket_status,
+            "priority": ticket.ticket_priority,
+            "url": ticket.ticket_url,
+            "assigneeEmail": ticket.assignee_email,
+            "assigneeDisplayName": assignee_display_name,
+            "projectKey": project_key,
+            "comments": ticket.comments,
+        },
+        "metadata": {
+            "source": source,
+            "eventId": f"{source}-{ticket.ticket_key}-{created_at}",
+            "createdAt": created_at,
+        },
+    }
 
 # Register Client
 
@@ -87,29 +120,40 @@ def register_client(email, client_id, websocket):
 
 # Send Ticket
 
-async def send_ticket_to_clients(ticket):
+# Send Ticket
+
+async def send_ticket_to_clients(ticket, event=None):
     email = ticket.assignee_email
 
     if email not in clients_by_email:
         logger.info(f"No connected client for {email}")
         return
 
+    # If no normalized event was provided (e.g. mock ticket),
+    # create one automatically.
+    if event is None:
+        event = normalize_ticket_event(ticket)
+
     dead_clients = []
 
     for client in clients_by_email[email]:
         try:
-            await client["websocket"].send_json(ticket.model_dump())
+            await client["websocket"].send_json(event)
+
             client["last_seen"] = datetime.now().isoformat()
-            logger.info(f"Ticket sent to {email} ({client['client_id']})")
+
+            logger.info(
+                f"Ticket sent to {email} ({client['client_id']})"
+            )
 
         except Exception as e:
             logger.error(str(e))
             dead_clients.append(client)
 
     # Remove dead sockets
-
     for client in dead_clients:
         clients_by_email[email].remove(client)
+
     if email in clients_by_email and len(clients_by_email[email]) == 0:
         del clients_by_email[email]
 
@@ -229,26 +273,33 @@ async def jira_assignment_webhook(
             detail="Invalid Jira webhook secret"
         )
 
+    # Resolve assignee email
+    assignee_email = payload.assigneeEmail
+
+    # Fallback to account ID mapping
+    if not assignee_email:
+        assignee_email = assignee_email_map.get(
+            payload.assigneeAccountId
+        )
+
+    # Still unresolved
+    if not assignee_email:
+        raise HTTPException(
+            status_code=400,
+            detail="Unable to resolve assignee email"
+        )
+
     # Convert Jira payload to internal ticket event
     ticket = JiraTicketEvent(
-
         event_type=payload.eventType,
-
         ticket_key=payload.issueKey,
-
         ticket_title=payload.summary,
-
         ticket_description=payload.description or "",
-
         ticket_status=payload.status or "",
-
         ticket_priority=payload.priority or "",
-
         ticket_url=payload.issueUrl,
-
         comments=[],
-
-        assignee_email=payload.assigneeEmail or ""
+        assignee_email=assignee_email
     )
 
     # Store ticket history
@@ -261,17 +312,20 @@ async def jira_assignment_webhook(
         }
     )
 
-    # Count connected clients for this assignee
-    matched_clients = len(
-        clients_by_email.get(ticket.assignee_email, [])
-    )
+    # Count connected clients
+    matched_clients = len(clients_by_email.get(ticket.assignee_email, []))
 
-    # Send ticket only to matching developer
-    await send_ticket_to_clients(ticket)
+    # Send ticket
+    event = normalize_ticket_event(
+    ticket=ticket,
+    source="jira",
+    assignee_display_name=payload.assigneeDisplayName,
+    project_key=payload.projectKey,
+)
 
-    # Response
+    await send_ticket_to_clients(ticket, event)
+
     if matched_clients > 0:
-
         return {
             "status": "processed",
             "ticketKey": ticket.ticket_key,
@@ -330,6 +384,22 @@ async def get_mock_ticket(request: MockTicketRequest):
         "ticketKey": ticket.ticket_key
     }
 
+@app.get("/dev/assignee-map")
+def get_assignee_mapping():
+
+    return assignee_email_map
+
+@app.post("/dev/assignee-map")
+def add_assignee_mapping(request: AssigneeMappingRequest):
+
+    assignee_email_map[request.accountId] = request.email
+
+    return {
+        "success": True,
+        "accountId": request.accountId,
+        "email": request.email
+    }
+
 # Developer Context Submit
 
 @app.post("/tickets/{ticket_key}/developer-context", response_model=DeveloperContextResponse)
@@ -362,9 +432,9 @@ def submit_developer_context(ticket_key: str, request: DeveloperContextRequest):
         "submittedAt": datetime.now().isoformat()
     }
     if ticket_key not in developer_contexts:
-        developer_contexts[ticket_key] = []
+     developer_contexts[ticket_key] = []
 
-    developer_contexts[ticket_key].append(context)
+     developer_contexts[ticket_key].append(context)
 
     return DeveloperContextResponse(
         success=True,
