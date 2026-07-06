@@ -13,6 +13,7 @@ logger = logging.getLogger(__name__)
 app = FastAPI(title="Jira VS Code Assistant Backend")
 
 # Storage
+# Storage
 
 clients_by_email = {}
 
@@ -25,6 +26,13 @@ assignee_email_map = {}
 # Mock Ticket Request Model
 
 class MockTicketRequest(BaseModel):
+
+    assigneeEmail: str = Field(..., min_length=1)
+    ticketKey: str = Field(..., min_length=1)
+    title: str = Field(..., min_length=1)
+
+# Create Mock Ticket
+
 
     assigneeEmail: str = Field(..., min_length=1)
     ticketKey: str = Field(..., min_length=1)
@@ -159,8 +167,73 @@ async def send_ticket_to_clients(ticket, event=None):
 
 # WebSocket Endpoint
 
+
 @app.websocket("/ws/client")
 async def websocket_client(websocket: WebSocket):
+    await websocket.accept()
+
+    email = None
+    client_id = None
+
+    try:
+        logger.info("VS Code client connected")
+        data = await websocket.receive_json()
+
+        # Validation
+        try:
+
+            registration = ClientRegistrationRequest(**data)
+        except Exception as e:
+            await websocket.send_json(
+                {
+                    "type": "error",
+                    "message": "Invalid registration message",
+                    "details": str(e) 
+                }
+            )
+            return
+        
+        email = registration.userEmail
+        client_id = registration.clientId
+
+        register_client(email, client_id, websocket)
+
+        await websocket.send_json(
+            {
+                "type": "client_registered",
+                "status": "success",
+                "userEmail": email
+            }
+        )
+
+        # Ticket behaviour
+
+        ticket = create_mock_ticket()
+
+        await websocket.send_json(ticket.model_dump())
+        logger.info("Ticket sent automatically")
+
+        while True:
+            message = await websocket.receive_text()
+            logger.info(f"Message received {message}")
+
+    except WebSocketDisconnect:
+
+        logger.info("Client disconnected")
+
+    finally:
+
+        if email and email in clients_by_email:
+            clients_by_email[email] = [
+                client
+                for client in clients_by_email[email]
+                if client["client_id"] != client_id
+            ]
+            if len(clients_by_email[email]) == 0:
+                del clients_by_email[email]
+
+# Connected Clients
+
     await websocket.accept()
 
     email = None
@@ -245,6 +318,7 @@ def get_connected_clients():
 
     return response
 
+# Health Check
 # Health Check
 
 @app.get("/health")
@@ -357,16 +431,21 @@ def get_ticket_developer_context(ticket_key: str):
 
 # Ticket History
 
+# Ticket History
+
 @app.get("/dev/tickets")
 def get_generated_tickets():
 
     return {
         "tickets":generated_tickets
+        "tickets":generated_tickets
     }
 
 # Mock Ticket
+# Mock Ticket
 
 @app.post("/dev/mock-ticket")
+async def get_mock_ticket(request: MockTicketRequest):
 async def get_mock_ticket(request: MockTicketRequest):
 
     ticket = create_mock_ticket(request)
@@ -377,7 +456,15 @@ async def get_mock_ticket(request: MockTicketRequest):
             "assigneeEmail": ticket.assignee_email,
             "status": ticket.ticket_status
         }
+    generated_tickets.append(
+        {
+            "key": ticket.ticket_key,
+            "title": ticket.ticket_title,
+            "assigneeEmail": ticket.assignee_email,
+            "status": ticket.ticket_status
+        }
     )
+    await send_ticket_to_clients(ticket)
     await send_ticket_to_clients(ticket)
     return {
         "broadcastAttempted": True,
@@ -412,13 +499,16 @@ def submit_developer_context(ticket_key: str, request: DeveloperContextRequest):
             message="Invalid ticket key",
             ticketKey=ticket_key,
             submittedAt=None
+            submittedAt=None
         )
 
     if not request.additionalContext.strip():
         return DeveloperContextResponse(
             success=False,
             message= "additionalContext cannot be empty",
+            message= "additionalContext cannot be empty",
             ticketKey=ticket_key,
+            submittedAt=None
             submittedAt=None
         )
 
@@ -438,6 +528,7 @@ def submit_developer_context(ticket_key: str, request: DeveloperContextRequest):
 
     return DeveloperContextResponse(
         success=True,
+        message= "Developer context submitted successfully",
         message= "Developer context submitted successfully",
         ticketKey=ticket_key,
         submittedAt=context["submittedAt"]

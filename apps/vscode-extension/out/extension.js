@@ -8,7 +8,34 @@ let latestTicket;
 let socket;
 let connectionStatus = 'disconnected';
 let currentPanel;
+let isAutoConnect = false;
+let reconnectAttempts = 0;
+const reconnectDelays = [
+    2000,
+    5000,
+    10000,
+    30000,
+    30000
+];
+let reconnectTimer;
+function scheduleReconnect() {
+    if (reconnectTimer) {
+        return;
+    }
+    const delay = reconnectDelays[Math.min(reconnectAttempts, reconnectDelays.length - 1)];
+    reconnectTimer = setTimeout(() => {
+        reconnectTimer = undefined;
+        reconnectAttempts++;
+        vscode.commands.executeCommand('jira-assistant.connectBackend');
+    }, delay);
+}
 function activate(context) {
+    let clientId = context.globalState.get('clientId');
+    if (!clientId) {
+        clientId =
+            `vscode-client-${Date.now()}`;
+        context.globalState.update('clientId', clientId);
+    }
     const hello = vscode.commands.registerCommand('jira-assistant.hello', () => {
         vscode.window.showInformationMessage('Hello from Jira Assistant!');
     });
@@ -234,19 +261,57 @@ box.focus();
     const config = vscode.workspace.getConfiguration('jiraAssistant');
     const backendUrl = config.get('backendUrl');
     const websocketUrl = config.get('websocketUrl');
+    const autoConnect = config.get('autoConnect');
+    const showNotifications = config.get('showNotifications');
     const userEmail = config.get('userEmail');
-    const clientId = `vscode-client-${Date.now()}`;
     const connectBackend = vscode.commands.registerCommand('jira-assistant.connectBackend', () => {
+        reconnectAttempts = 0;
+        if (reconnectTimer) {
+            clearTimeout(reconnectTimer);
+            reconnectTimer = undefined;
+        }
         if (socket) {
-            socket.close();
+            if (socket.readyState === WebSocket.OPEN) {
+                vscode.window.showInformationMessage('Already connected to backend.');
+                return;
+            }
+            if (socket.readyState === WebSocket.CONNECTING) {
+                vscode.window.showInformationMessage('Connection is already in progress.');
+                return;
+            }
         }
         connectionStatus =
             'connecting';
-        socket =
-            new WebSocket(websocketUrl);
+        if (!backendUrl) {
+            vscode.window.showErrorMessage('Please configure jiraAssistant.backendUrl before connecting.');
+            return;
+        }
+        if (!websocketUrl) {
+            vscode.window.showErrorMessage('Please configure jiraAssistant.websocketUrl before connecting.');
+            return;
+        }
+        if (!userEmail || userEmail.trim() === '') {
+            vscode.window.showErrorMessage('Please configure jiraAssistant.userEmail before connecting.');
+            return;
+        }
+        if (!websocketUrl ||
+            (!websocketUrl.startsWith('ws://') &&
+                !websocketUrl.startsWith('wss://'))) {
+            connectionStatus = 'disconnected';
+            vscode.window.showErrorMessage('Invalid WebSocket URL.');
+            return;
+        }
+        socket = new WebSocket(websocketUrl);
         socket.on('open', () => {
             connectionStatus =
-                `connected`;
+                'connected';
+            isAutoConnect = false;
+            /* Reset reconnect state */
+            reconnectAttempts = 0;
+            if (reconnectTimer) {
+                clearTimeout(reconnectTimer);
+                reconnectTimer = undefined;
+            }
             vscode.window.showInformationMessage(connectionStatus);
             /* Register client */
             socket.send(JSON.stringify({
@@ -306,29 +371,30 @@ ${latestTicket.title}`, 'Open Ticket', 'Add Context', 'Ignore');
             }
         });
         socket.on('close', () => {
-            connectionStatus =
-                'disconnected';
-            setTimeout(() => {
-                if (socket?.readyState ===
-                    WebSocket.CLOSED) {
-                    socket =
-                        undefined;
-                }
-            }, 300);
+            connectionStatus = 'disconnected';
+            socket = undefined;
+            scheduleReconnect();
         });
         socket.on('error', () => {
-            connectionStatus =
-                'disconnected';
-            vscode.window.showWarningMessage('Backend unavailable');
+            connectionStatus = 'disconnected';
+            if (!isAutoConnect) {
+                vscode.window.showWarningMessage('Backend unavailable');
+            }
+            isAutoConnect = false;
         });
     });
     const showConnectionStatus = vscode.commands.registerCommand('jira-assistant.showConnectionStatus', () => {
         vscode.window.showInformationMessage(connectionStatus);
     });
-    context.subscriptions.push(hello, openPanel, mockTicket, connectBackend, showConnectionStatus);
-    setTimeout(() => {
-        vscode.commands.executeCommand('jira-assistant.connectBackend');
-    }, 1000);
+    context.subscriptions.push(hello, openPanel, openLatestTicket, mockTicket, connectBackend, showConnectionStatus);
+    if (autoConnect &&
+        userEmail &&
+        userEmail.trim() !== '') {
+        isAutoConnect = true;
+        setTimeout(() => {
+            vscode.commands.executeCommand('jira-assistant.connectBackend');
+        }, 100);
+    }
 }
 function deactivate() { }
 //# sourceMappingURL=extension.js.map
