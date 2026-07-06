@@ -10,6 +10,7 @@ let connectionStatus:
 'disconnected';
 
 let currentPanel: any;
+let isAutoConnect = false;
 
 export function activate(context: vscode.ExtensionContext) {
 
@@ -492,7 +493,9 @@ socket.on(
 () => {
 
 connectionStatus =
-`connected`;
+'connected';
+
+isAutoConnect = false;
 
 vscode.window.showInformationMessage(
 connectionStatus
@@ -519,8 +522,6 @@ clientId
 
 }
 );
-
-
 socket.on(
 'message',
 async (data)=>{
@@ -564,6 +565,7 @@ connectionStatus
 return;
 
 }
+
 
 
 /* Ticket */
@@ -682,12 +684,17 @@ socket.on(
 'error',
 ()=>{
 
-connectionStatus =
-'disconnected';
+connectionStatus = 'disconnected';
 
-vscode.window.showWarningMessage(
-'Backend unavailable'
-);
+if (!isAutoConnect) {
+
+    vscode.window.showWarningMessage(
+        'Backend unavailable'
+    );
+
+}
+
+isAutoConnect = false;
 
 }
 );
@@ -710,6 +717,7 @@ connectionStatus
 context.subscriptions.push(
 	hello,
 	openPanel,
+	openLatestTicket,
 	mockTicket,
 	connectBackend,
 	showConnectionStatus
@@ -720,9 +728,11 @@ if (
 	userEmail &&
 	userEmail.trim() !== ''
 ) {
+	isAutoConnect = true;
 
 	setTimeout(
 	()=>{
+
 
 		vscode.commands.executeCommand(
 			'jira-assistant.connectBackend'
@@ -733,7 +743,7 @@ if (
 	);
 
 }
-
 }
+
 
 export function deactivate() {}

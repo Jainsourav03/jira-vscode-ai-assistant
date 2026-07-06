@@ -8,6 +8,7 @@ let latestTicket;
 let socket;
 let connectionStatus = 'disconnected';
 let currentPanel;
+let isAutoConnect = false;
 function activate(context) {
     let clientId = context.globalState.get('clientId');
     if (!clientId) {
@@ -278,7 +279,8 @@ box.focus();
         socket = new WebSocket(websocketUrl);
         socket.on('open', () => {
             connectionStatus =
-                `connected`;
+                'connected';
+            isAutoConnect = false;
             vscode.window.showInformationMessage(connectionStatus);
             /* Register client */
             socket.send(JSON.stringify({
@@ -343,18 +345,21 @@ ${latestTicket.title}`, 'Open Ticket', 'Add Context', 'Ignore');
             vscode.window.showWarningMessage('Connection closed.');
         });
         socket.on('error', () => {
-            connectionStatus =
-                'disconnected';
-            vscode.window.showWarningMessage('Backend unavailable');
+            connectionStatus = 'disconnected';
+            if (!isAutoConnect) {
+                vscode.window.showWarningMessage('Backend unavailable');
+            }
+            isAutoConnect = false;
         });
     });
     const showConnectionStatus = vscode.commands.registerCommand('jira-assistant.showConnectionStatus', () => {
         vscode.window.showInformationMessage(connectionStatus);
     });
-    context.subscriptions.push(hello, openPanel, mockTicket, connectBackend, showConnectionStatus);
+    context.subscriptions.push(hello, openPanel, openLatestTicket, mockTicket, connectBackend, showConnectionStatus);
     if (autoConnect &&
         userEmail &&
         userEmail.trim() !== '') {
+        isAutoConnect = true;
         setTimeout(() => {
             vscode.commands.executeCommand('jira-assistant.connectBackend');
         }, 1000);
