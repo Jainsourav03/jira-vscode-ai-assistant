@@ -11,6 +11,44 @@ let connectionStatus:
 
 let currentPanel: any;
 let isAutoConnect = false;
+let reconnectAttempts = 0;
+
+const reconnectDelays = [
+    2000,
+    5000,
+    10000,
+    30000,
+    30000
+];
+
+let reconnectTimer: NodeJS.Timeout | undefined;
+function scheduleReconnect() {
+
+    if (reconnectTimer) {
+        return;
+    }
+
+    const delay =
+        reconnectDelays[
+            Math.min(
+                reconnectAttempts,
+                reconnectDelays.length - 1
+            )
+        ];
+
+    reconnectTimer = setTimeout(() => {
+
+        reconnectTimer = undefined;
+
+        reconnectAttempts++;
+
+        vscode.commands.executeCommand(
+            'jira-assistant.connectBackend'
+        );
+
+    }, delay);
+
+}
 
 export function activate(context: vscode.ExtensionContext) {
 
@@ -412,6 +450,12 @@ vscode.commands.registerCommand(
 'jira-assistant.connectBackend',
 () => {
 
+	reconnectAttempts = 0;
+
+if (reconnectTimer) {
+    clearTimeout(reconnectTimer);
+    reconnectTimer = undefined;
+}
 if (socket) {
 
     if (socket.readyState === WebSocket.OPEN) {
@@ -496,6 +540,18 @@ connectionStatus =
 'connected';
 
 isAutoConnect = false;
+
+/* Reset reconnect state */
+
+reconnectAttempts = 0;
+
+if (reconnectTimer) {
+
+    clearTimeout(reconnectTimer);
+
+    reconnectTimer = undefined;
+
+}
 
 vscode.window.showInformationMessage(
 connectionStatus
@@ -674,9 +730,8 @@ socket.on(
 
         socket = undefined;
 
-        vscode.window.showWarningMessage(
-            'Connection closed.'
-        );
+        
+		scheduleReconnect();
 
     }
 );
@@ -739,7 +794,7 @@ if (
 		);
 
 	},
-	1000
+	100
 	);
 
 }

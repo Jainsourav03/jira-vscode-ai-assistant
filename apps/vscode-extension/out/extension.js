@@ -9,6 +9,26 @@ let socket;
 let connectionStatus = 'disconnected';
 let currentPanel;
 let isAutoConnect = false;
+let reconnectAttempts = 0;
+const reconnectDelays = [
+    2000,
+    5000,
+    10000,
+    30000,
+    30000
+];
+let reconnectTimer;
+function scheduleReconnect() {
+    if (reconnectTimer) {
+        return;
+    }
+    const delay = reconnectDelays[Math.min(reconnectAttempts, reconnectDelays.length - 1)];
+    reconnectTimer = setTimeout(() => {
+        reconnectTimer = undefined;
+        reconnectAttempts++;
+        vscode.commands.executeCommand('jira-assistant.connectBackend');
+    }, delay);
+}
 function activate(context) {
     let clientId = context.globalState.get('clientId');
     if (!clientId) {
@@ -245,6 +265,11 @@ box.focus();
     const showNotifications = config.get('showNotifications');
     const userEmail = config.get('userEmail');
     const connectBackend = vscode.commands.registerCommand('jira-assistant.connectBackend', () => {
+        reconnectAttempts = 0;
+        if (reconnectTimer) {
+            clearTimeout(reconnectTimer);
+            reconnectTimer = undefined;
+        }
         if (socket) {
             if (socket.readyState === WebSocket.OPEN) {
                 vscode.window.showInformationMessage('Already connected to backend.');
@@ -281,6 +306,12 @@ box.focus();
             connectionStatus =
                 'connected';
             isAutoConnect = false;
+            /* Reset reconnect state */
+            reconnectAttempts = 0;
+            if (reconnectTimer) {
+                clearTimeout(reconnectTimer);
+                reconnectTimer = undefined;
+            }
             vscode.window.showInformationMessage(connectionStatus);
             /* Register client */
             socket.send(JSON.stringify({
@@ -342,7 +373,7 @@ ${latestTicket.title}`, 'Open Ticket', 'Add Context', 'Ignore');
         socket.on('close', () => {
             connectionStatus = 'disconnected';
             socket = undefined;
-            vscode.window.showWarningMessage('Connection closed.');
+            scheduleReconnect();
         });
         socket.on('error', () => {
             connectionStatus = 'disconnected';
@@ -362,7 +393,7 @@ ${latestTicket.title}`, 'Open Ticket', 'Add Context', 'Ignore');
         isAutoConnect = true;
         setTimeout(() => {
             vscode.commands.executeCommand('jira-assistant.connectBackend');
-        }, 1000);
+        }, 100);
     }
 }
 function deactivate() { }
