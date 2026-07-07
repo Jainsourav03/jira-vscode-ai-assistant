@@ -18,17 +18,6 @@ const reconnectDelays = [
     30000
 ];
 let reconnectTimer;
-function scheduleReconnect() {
-    if (reconnectTimer) {
-        return;
-    }
-    const delay = reconnectDelays[Math.min(reconnectAttempts, reconnectDelays.length - 1)];
-    reconnectTimer = setTimeout(() => {
-        reconnectTimer = undefined;
-        reconnectAttempts++;
-        vscode.commands.executeCommand('jira-assistant.connectBackend');
-    }, delay);
-}
 function activate(context) {
     let clientId = context.globalState.get('clientId');
     if (!clientId) {
@@ -59,6 +48,9 @@ function activate(context) {
                     '$(warning) Jira Assistant: Error';
         }
     }
+    const outputChannel = vscode.window.createOutputChannel('Jira Assistant');
+    outputChannel.show(true);
+    outputChannel.appendLine('Extension activated');
     const hello = vscode.commands.registerCommand('jira-assistant.hello', () => {
         vscode.window.showInformationMessage('Hello from Jira Assistant!');
     });
@@ -91,6 +83,7 @@ function activate(context) {
                         })
                     });
                     if (response.ok) {
+                        outputChannel.appendLine(`Context submitted: ${latestTicket?.ticket_key}`);
                         vscode.window.showInformationMessage('Context submitted successfully');
                     }
                     else {
@@ -287,6 +280,18 @@ box.focus();
     const autoConnect = config.get('autoConnect');
     const showNotifications = config.get('showNotifications');
     const userEmail = config.get('userEmail');
+    function scheduleReconnect() {
+        if (reconnectTimer) {
+            return;
+        }
+        const delay = reconnectDelays[Math.min(reconnectAttempts, reconnectDelays.length - 1)];
+        outputChannel.appendLine(`Reconnect scheduled in ${delay / 1000} seconds`);
+        reconnectTimer = setTimeout(() => {
+            reconnectTimer = undefined;
+            reconnectAttempts++;
+            vscode.commands.executeCommand('jira-assistant.connectBackend');
+        }, delay);
+    }
     const connectBackend = vscode.commands.registerCommand('jira-assistant.connectBackend', () => {
         reconnectAttempts = 0;
         if (reconnectTimer) {
@@ -326,6 +331,7 @@ box.focus();
             vscode.window.showErrorMessage('Invalid WebSocket URL.');
             return;
         }
+        outputChannel.appendLine('Connection attempt');
         socket = new WebSocket(websocketUrl);
         socket.on('open', () => {
             connectionStatus =
@@ -338,6 +344,7 @@ box.focus();
                 clearTimeout(reconnectTimer);
                 reconnectTimer = undefined;
             }
+            outputChannel.appendLine('Connection success');
             vscode.window.showInformationMessage(connectionStatus);
             /* Register client */
             socket.send(JSON.stringify({
@@ -354,12 +361,14 @@ box.focus();
                     'client_registered') {
                     if (message.status ===
                         'success') {
+                        outputChannel.appendLine(`Registration success: ${message.userEmail}`);
                         vscode.window.showInformationMessage(`Registered successfully as ${message.userEmail}`);
                     }
                     else {
                         connectionStatus =
                             'disconnected';
                         updateStatusBar();
+                        outputChannel.appendLine('Registration failed');
                         vscode.window.showErrorMessage(connectionStatus);
                     }
                     return;
@@ -377,6 +386,7 @@ box.focus();
                         jira_link: message.jira_link,
                         assignee_email: message.assignee_email
                     };
+                    outputChannel.appendLine(`Ticket received: ${latestTicket.ticket_key}`);
                     const action = await vscode.window.showInformationMessage(`New Jira ticket assigned:
 ${latestTicket.ticket_key}
 
@@ -394,6 +404,7 @@ ${latestTicket.title}`, 'Open Ticket', 'Add Context', 'Ignore');
                 vscode.window.showWarningMessage('Unknown backend event');
             }
             catch {
+                outputChannel.appendLine('Invalid message received');
                 vscode.window.showErrorMessage('Invalid backend JSON');
             }
         });
@@ -401,11 +412,13 @@ ${latestTicket.title}`, 'Open Ticket', 'Add Context', 'Ignore');
             connectionStatus = 'disconnected';
             socket = undefined;
             updateStatusBar();
+            outputChannel.appendLine('Disconnection');
             scheduleReconnect();
         });
         socket.on('error', () => {
             connectionStatus = 'disconnected';
             updateStatusBar();
+            outputChannel.appendLine('Backend error');
             if (!isAutoConnect) {
                 vscode.window.showWarningMessage('Backend unavailable');
             }
@@ -448,7 +461,7 @@ ${latestTicket.title}`, 'Open Ticket', 'Add Context', 'Ignore');
                 break;
         }
     });
-    context.subscriptions.push(hello, openPanel, mockTicket, connectBackend, showConnectionStatus, statusBarMenu, statusBarItem);
+    context.subscriptions.push(hello, openPanel, mockTicket, connectBackend, showConnectionStatus, statusBarMenu, statusBarItem, outputChannel);
     if (autoConnect &&
         userEmail &&
         userEmail.trim() !== '') {

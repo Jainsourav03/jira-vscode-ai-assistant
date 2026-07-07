@@ -22,33 +22,6 @@ const reconnectDelays = [
 ];
 
 let reconnectTimer: NodeJS.Timeout | undefined;
-function scheduleReconnect() {
-
-    if (reconnectTimer) {
-        return;
-    }
-
-    const delay =
-        reconnectDelays[
-            Math.min(
-                reconnectAttempts,
-                reconnectDelays.length - 1
-            )
-        ];
-
-    reconnectTimer = setTimeout(() => {
-
-        reconnectTimer = undefined;
-
-        reconnectAttempts++;
-
-        vscode.commands.executeCommand(
-            'jira-assistant.connectBackend'
-        );
-
-    }, delay);
-
-}
 
 export function activate(context: vscode.ExtensionContext) {
 
@@ -111,6 +84,15 @@ function updateStatusBar() {
     }
 
 }
+const outputChannel =
+vscode.window.createOutputChannel(
+    'Jira Assistant'
+);
+
+outputChannel.show(true);
+outputChannel.appendLine(
+        'Extension activated'
+    );
 
 	const hello = vscode.commands.registerCommand(
 		'jira-assistant.hello',
@@ -200,6 +182,10 @@ vscode.workspace.workspaceFolders?.[0]
 if(
 response.ok
 ){
+
+	outputChannel.appendLine(
+`Context submitted: ${latestTicket?.ticket_key}`
+);
 
 vscode.window.showInformationMessage(
 'Context submitted successfully'
@@ -486,7 +472,37 @@ config.get<boolean>(
 		'userEmail'
 	);
 
-	
+	function scheduleReconnect() {
+
+    if (reconnectTimer) {
+        return;
+    }
+
+    const delay =
+        reconnectDelays[
+            Math.min(
+                reconnectAttempts,
+                reconnectDelays.length - 1
+            )
+        ];
+		outputChannel.appendLine(
+        `Reconnect scheduled in ${delay / 1000} seconds`
+    );
+
+    reconnectTimer = setTimeout(() => {
+
+        reconnectTimer = undefined;
+
+        reconnectAttempts++;
+
+        vscode.commands.executeCommand(
+            'jira-assistant.connectBackend'
+        );
+
+    }, delay);
+
+}
+
 
 const connectBackend =
 vscode.commands.registerCommand(
@@ -573,6 +589,9 @@ if (
 	return;
 
 }
+outputChannel.appendLine(
+    'Connection attempt'
+);
 
 socket = new WebSocket(websocketUrl);
 
@@ -598,6 +617,9 @@ if (reconnectTimer) {
     reconnectTimer = undefined;
 
 }
+outputChannel.appendLine(
+    'Connection success'
+);
 
 vscode.window.showInformationMessage(
 connectionStatus
@@ -646,6 +668,9 @@ if(
 message.status===
 'success'
 ){
+	outputChannel.appendLine(
+`Registration success: ${message.userEmail}`
+);
 
 vscode.window.showInformationMessage(
 `Registered successfully as ${message.userEmail}`
@@ -658,6 +683,10 @@ else{
 connectionStatus =
 'disconnected';
 updateStatusBar();
+
+outputChannel.appendLine(
+'Registration failed'
+);
 
 vscode.window.showErrorMessage(
 connectionStatus
@@ -704,6 +733,9 @@ assignee_email:
 message.assignee_email
 
 };
+outputChannel.appendLine(
+    `Ticket received: ${latestTicket.ticket_key}`
+);
 
 const action =
 await vscode.window.showInformationMessage(
@@ -758,6 +790,10 @@ vscode.window.showWarningMessage(
 
 catch{
 
+	outputChannel.appendLine(
+'Invalid message received'
+);
+
 vscode.window.showErrorMessage(
 'Invalid backend JSON'
 );
@@ -778,6 +814,9 @@ socket.on(
         socket = undefined;
 
         updateStatusBar();
+		outputChannel.appendLine(
+        'Disconnection'
+    );
 
 		scheduleReconnect();
 
@@ -789,6 +828,9 @@ socket.on(
 
 connectionStatus = 'disconnected';
 updateStatusBar();
+outputChannel.appendLine(
+    'Backend error'
+);
 if (!isAutoConnect) {
 
     vscode.window.showWarningMessage(
@@ -906,7 +948,8 @@ mockTicket,
 connectBackend,
 showConnectionStatus,
 statusBarMenu,
-statusBarItem
+statusBarItem,
+outputChannel
 );
 
 if (
