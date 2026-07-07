@@ -68,6 +68,49 @@ export function activate(context: vscode.ExtensionContext) {
 		);
 
 	}
+	const statusBarItem =
+vscode.window.createStatusBarItem(
+    vscode.StatusBarAlignment.Left,
+    100
+);
+statusBarItem.command =
+'jira-assistant.statusBarMenu';
+
+statusBarItem.show();
+
+function updateStatusBar() {
+
+    switch(connectionStatus){
+
+        case 'connected':
+
+            statusBarItem.text =
+            '$(plug) Jira Assistant: Connected';
+
+            break;
+
+        case 'connecting':
+
+            statusBarItem.text =
+            '$(sync~spin) Jira Assistant: Connecting';
+
+            break;
+
+        case 'disconnected':
+
+            statusBarItem.text =
+            '$(circle-slash) Jira Assistant: Disconnected';
+
+            break;
+
+        default:
+
+            statusBarItem.text =
+            '$(warning) Jira Assistant: Error';
+
+    }
+
+}
 
 	const hello = vscode.commands.registerCommand(
 		'jira-assistant.hello',
@@ -479,6 +522,7 @@ if (socket) {
 }
 connectionStatus =
 'connecting';
+updateStatusBar();
 
 
 if(!backendUrl){
@@ -520,6 +564,7 @@ if (
 ) {
 
 	connectionStatus = 'disconnected';
+	updateStatusBar();
 
 	vscode.window.showErrorMessage(
 		'Invalid WebSocket URL.'
@@ -538,6 +583,7 @@ socket.on(
 
 connectionStatus =
 'connected';
+updateStatusBar();
 
 isAutoConnect = false;
 
@@ -611,6 +657,7 @@ else{
 
 connectionStatus =
 'disconnected';
+updateStatusBar();
 
 vscode.window.showErrorMessage(
 connectionStatus
@@ -730,7 +777,8 @@ socket.on(
 
         socket = undefined;
 
-        
+        updateStatusBar();
+
 		scheduleReconnect();
 
     }
@@ -740,7 +788,7 @@ socket.on(
 ()=>{
 
 connectionStatus = 'disconnected';
-
+updateStatusBar();
 if (!isAutoConnect) {
 
     vscode.window.showWarningMessage(
@@ -748,6 +796,7 @@ if (!isAutoConnect) {
     );
 
 }
+
 
 isAutoConnect = false;
 
@@ -769,13 +818,95 @@ connectionStatus
 
 }
 );
+
+const statusBarMenu =
+vscode.commands.registerCommand(
+'jira-assistant.statusBarMenu',
+async ()=>{
+
+const action =
+await vscode.window.showQuickPick(
+
+[
+'Connect',
+'Disconnect',
+'Reconnect',
+'Show Connection Status',
+'Open Latest Ticket',
+'Open Settings'
+],
+
+{
+placeHolder:
+'Jira Assistant'
+}
+
+);
+
+switch(action){
+
+case 'Connect':
+
+await vscode.commands.executeCommand(
+'jira-assistant.connectBackend'
+);
+
+break;
+
+case 'Disconnect':
+
+socket?.close();
+
+break;
+
+case 'Reconnect':
+
+socket?.close();
+
+await vscode.commands.executeCommand(
+'jira-assistant.connectBackend'
+);
+
+break;
+
+case 'Show Connection Status':
+
+await vscode.commands.executeCommand(
+'jira-assistant.showConnectionStatus'
+);
+
+break;
+
+case 'Open Latest Ticket':
+
+await vscode.commands.executeCommand(
+'jira-assistant.openLatestTicket'
+);
+
+break;
+
+case 'Open Settings':
+
+await vscode.commands.executeCommand(
+'workbench.action.openSettings',
+'jiraAssistant'
+);
+
+break;
+
+}
+
+}
+);
+
 context.subscriptions.push(
-	hello,
-	openPanel,
-	openLatestTicket,
-	mockTicket,
-	connectBackend,
-	showConnectionStatus
+hello,
+openPanel,
+mockTicket,
+connectBackend,
+showConnectionStatus,
+statusBarMenu,
+statusBarItem
 );
 
 if (
@@ -794,11 +925,12 @@ if (
 		);
 
 	},
-	100
 	);
 
 }
+updateStatusBar();
 }
+
 
 
 export function deactivate() {}

@@ -40,9 +40,14 @@
 "title":
 "Jira Assistant: Open Latest Ticket"
 },
-    {
+
+{
   "command": "jira-assistant.showConnectionStatus",
   "title": "Jira Assistant: Show Connection Status"
+},
+{
+    "command": "jira-assistant.statusBarMenu",
+    "title": "Jira Assistant Menu"
 }
   ],
 
