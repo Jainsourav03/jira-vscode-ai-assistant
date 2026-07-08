@@ -267,7 +267,7 @@ box.focus();
         await vscode.commands.executeCommand('jira-assistant.openPanel');
     });
     const mockTicket = vscode.commands.registerCommand('jira-assistant.mockTicket', async () => {
-        const action = await vscode.window.showInformationMessage('New Jira ticket assigned: PROJ-123 - Fix login redirect issue', 'Open Ticket', 'Add Context', 'Ignore');
+        const action = await vscode.window.showInformationMessage('New Jira ticket assigned: PROJ-123 - Fix login redirect issue', 'Open Ticket', 'Add Context', 'Open in Jira', 'Ignore');
         if (action === 'Open Ticket') {
             await vscode.commands.executeCommand('jira-assistant.openPanel');
         }
@@ -278,6 +278,11 @@ box.focus();
                     type: 'focusContext'
                 });
             }, 500);
+        }
+        else if (action === 'Open in Jira') {
+            if (latestTicket?.url) {
+                await vscode.env.openExternal(vscode.Uri.parse(latestTicket.url));
+            }
         }
         else {
             return;
@@ -431,15 +436,22 @@ ${message.message}`);
                     }
                     outputChannel.appendLine(`Ticket received: ${latestTicket?.key}`);
                     const action = await vscode.window.showInformationMessage(`New Jira ticket assigned:
-${latestTicket?.key}
-
-${latestTicket.title}`, 'Open Ticket', 'Add Context', 'Ignore');
+${latestTicket.key} - ${latestTicket.title}`, 'Open Ticket', 'Add Context', 'Open in Jira', 'Ignore');
                     if (action === 'Open Ticket') {
                         await vscode.commands.executeCommand('jira-assistant.openPanel');
                     }
                     else if (action === 'Add Context') {
                         await vscode.commands.executeCommand('jira-assistant.openPanel');
-                        await vscode.window.showInformationMessage('Enter additional context below');
+                        setTimeout(() => {
+                            currentPanel?.webview.postMessage({
+                                type: 'focusContext'
+                            });
+                        }, 500);
+                    }
+                    else if (action === 'Open in Jira') {
+                        if (latestTicket?.url) {
+                            await vscode.env.openExternal(vscode.Uri.parse(latestTicket.url));
+                        }
                     }
                     return;
                 }

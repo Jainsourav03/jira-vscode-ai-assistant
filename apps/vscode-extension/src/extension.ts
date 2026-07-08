@@ -422,7 +422,8 @@ await vscode.commands.executeCommand(
 			await vscode.window.showInformationMessage(
 				'New Jira ticket assigned: PROJ-123 - Fix login redirect issue',
 				'Open Ticket',
-				'Add Context',	
+				'Add Context',
+				'Open in Jira',	
 				'Ignore'
 			);
 
@@ -441,6 +442,7 @@ await vscode.commands.executeCommand(
 'jira-assistant.openPanel'
 );
 
+
 setTimeout(
 ()=>{
 
@@ -456,6 +458,20 @@ type:
 );
 
 }
+else if(action === 'Open in Jira'){
+
+    if(latestTicket?.url){
+
+        await vscode.env.openExternal(
+            vscode.Uri.parse(
+                latestTicket.url
+            )
+        );
+
+    }
+
+}
+
 			else{
 				return;
 			}
@@ -850,12 +866,11 @@ const action =
 await vscode.window.showInformationMessage(
 
 `New Jira ticket assigned:
-${latestTicket?.key}
-
-${latestTicket.title}`,
+${latestTicket.key} - ${latestTicket.title}`,
 
 'Open Ticket',
 'Add Context',
+'Open in Jira',
 'Ignore'
 
 );
@@ -878,9 +893,36 @@ await vscode.commands.executeCommand(
 'jira-assistant.openPanel'
 );
 
-await vscode.window.showInformationMessage(
-'Enter additional context below'
+setTimeout(
+()=>{
+
+currentPanel?.webview.postMessage({
+
+type:'focusContext'
+
+});
+
+},
+500
 );
+
+}
+
+else if(
+action==='Open in Jira'
+){
+
+if(latestTicket?.url){
+
+await vscode.env.openExternal(
+
+vscode.Uri.parse(
+latestTicket.url
+)
+
+);
+
+}
 
 }
 
