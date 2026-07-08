@@ -259,17 +259,24 @@ ${latestTicket?.status ?? 'Not Available'}
 <p><b>Priority:</b>
 ${latestTicket?.priority ?? 'Medium'}
 </p>
+<p><b>Project Key:</b>
+${latestTicket?.projectKey ?? 'N/A'}
+</p>
 
 <p><b>Description:</b>
 ${latestTicket?.description ?? 'No Description'}
 </p>
 
-<p><b>Comments:</b>
-${latestTicket?.comments ?? 'No Comments'}
-</p>
+${latestTicket?.comments
+?.map(comment => comment.body)
+.join("<br>") ?? "No Comments"}
 
 <p><b>Assignee Email:</b>
 ${latestTicket?.assigneeEmail ?? 'Unassigned'}
+</p>
+
+<p><b>Assignee Name:</b>
+${latestTicket?.assigneeDisplayName ?? 'N/A'}
 </p>
 
 <p>
@@ -281,6 +288,9 @@ href="${latestTicket?.url ?? 'https://jira.atlassian.com'}"
 Open Jira Ticket
 </a>
 
+</p>
+<p><b>Received:</b>
+${latestTicket?.receivedAt ?? 'N/A'}
 </p>
 
 <br>
@@ -297,8 +307,15 @@ style="width:100%;height:120px;"
 Submit Context
 </button>
 
-<button id="runBtn">
+<button id="runBtn" disabled>
 Run AI
+</button>
+
+<p>
+AI integration is not enabled in this MVP.
+</p>
+<button id="clearBtn">
+Clear Context
 </button>
 
 <div id="result"></div>
@@ -354,6 +371,22 @@ ticketKey:
 additionalContext:text
 });
 }		
+);
+
+document
+.getElementById(
+"clearBtn"
+)
+.addEventListener(
+"click",
+function(){
+
+document
+.getElementById(
+"contextBox"
+).value = "";
+
+}
 );
 
 
@@ -829,6 +862,9 @@ message.ticket_url,
 
 assigneeEmail:
 message.assignee_email,
+
+receivedAt: new Date().toLocaleString(),
+
 
 comments:
 message.comments?.map(

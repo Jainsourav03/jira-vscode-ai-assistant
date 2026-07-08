@@ -12,9 +12,13 @@ export type Ticket = {
     priority?: string;
     url?: string;
     assigneeEmail?: string;
-    assigneeDisplayName?: string;
     projectKey?: string;
-    comments?: TicketComment[];
+    receivedAt?: string;
+    assigneeDisplayName?: string;  
+    comments?: Array<{
+        author?: string;
+        body: string;
+    }>;
 };
 
 export type TicketAssignedEvent = {
