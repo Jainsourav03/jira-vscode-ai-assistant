@@ -76,7 +76,9 @@ class DeveloperContextRequest(BaseModel):
 
     userEmail: str = Field(..., min_length=1)
     additionalContext: str = Field(..., min_length=1)
+
     repoPath: str | None = None
+    activeFile: str | None = None
     branchName: str | None = None
     notes: str | None = None
 
