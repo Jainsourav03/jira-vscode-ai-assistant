@@ -59,7 +59,7 @@ function activate(context) {
         currentPanel = vscode.window.createWebviewPanel('jiraAssistant', 'Jira Assistant - Ticket', vscode.ViewColumn.One, {
             enableScripts: true
         });
-        currentPanel.webview.onDidReceiveMessage((message) => {
+        currentPanel?.webview.onDidReceiveMessage((message) => {
             if (message.type ===
                 'webviewReady') {
                 currentPanel?.webview.postMessage({
@@ -67,24 +67,32 @@ function activate(context) {
                 });
             }
         });
-        currentPanel.webview.onDidReceiveMessage(async (message) => {
+        currentPanel?.webview.onDidReceiveMessage(async (message) => {
             if (message.type ===
                 'submitContext') {
                 try {
-                    const response = await fetch(`${backendUrl}/tickets/${latestTicket?.ticket_key}/developer-context`, {
+                    const userEmail = vscode.workspace
+                        .getConfiguration('jiraAssistant')
+                        .get('userEmail');
+                    if (!userEmail) {
+                        vscode.window.showErrorMessage('Please configure jiraAssistant.userEmail');
+                        return;
+                    }
+                    const request = {
+                        userEmail: userEmail,
+                        additionalContext: message.additionalContext,
+                        repoPath: vscode.workspace.workspaceFolders?.[0]
+                            ?.uri.fsPath
+                    };
+                    const response = await fetch(`${backendUrl}/tickets/${latestTicket?.key}/developer-context`, {
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/json'
                         },
-                        body: JSON.stringify({
-                            userEmail: userEmail,
-                            additionalContext: message.additionalContext,
-                            repoPath: vscode.workspace.workspaceFolders?.[0]
-                                ?.uri.fsPath
-                        })
+                        body: JSON.stringify(request)
                     });
                     if (response.ok) {
-                        outputChannel.appendLine(`Context submitted: ${latestTicket?.ticket_key}`);
+                        outputChannel.appendLine(`Context submitted: ${latestTicket?.key}`);
                         vscode.window.showInformationMessage('Context submitted successfully');
                     }
                     else {
@@ -105,7 +113,7 @@ function activate(context) {
 <h2>Jira Ticket Details</h2>
 
 <p><b>Ticket Key:</b>
-${latestTicket?.ticket_key ?? 'No Ticket'}
+${latestTicket?.key ?? 'No Ticket'}
 </p>
 
 <p><b>Title:</b>
@@ -129,14 +137,14 @@ ${latestTicket?.comments ?? 'No Comments'}
 </p>
 
 <p><b>Assignee Email:</b>
-${latestTicket?.assignee_email ?? 'Unassigned'}
+${latestTicket?.assigneeEmail ?? 'Unassigned'}
 </p>
 
 <p>
 <b>Jira Link:</b>
 
 <a
-href="${latestTicket?.jira_link ?? 'https://jira.atlassian.com'}"
+href="${latestTicket?.url ?? 'https://jira.atlassian.com'}"
 >
 Open Jira Ticket
 </a>
@@ -210,7 +218,7 @@ document
 vscode.postMessage({
 type:'submitContext',
 ticketKey:
-"${latestTicket?.ticket_key}",
+"${latestTicket?.key}",
 additionalContext:text
 });
 }		
@@ -266,7 +274,7 @@ box.focus();
         else if (action === 'Add Context') {
             await vscode.commands.executeCommand('jira-assistant.openPanel');
             setTimeout(() => {
-                currentPanel.webview.postMessage({
+                currentPanel?.webview.postMessage({
                     type: 'focusContext'
                 });
             }, 500);
@@ -403,14 +411,16 @@ ${message.message}`);
                         return;
                     }
                     latestTicket = {
-                        ticket_key: message.ticket_key,
+                        key: message.ticket_key,
                         title: message.ticket_title,
+                        description: message.ticket_description,
                         status: message.ticket_status,
                         priority: message.ticket_priority,
-                        description: message.ticket_description,
-                        comments: message.comments,
-                        jira_link: message.jira_link,
-                        assignee_email: message.assignee_email
+                        url: message.ticket_url,
+                        assigneeEmail: message.assignee_email,
+                        comments: message.comments?.map((body) => ({
+                            body
+                        }))
                     };
                     recentTickets.unshift(latestTicket);
                     if (recentTickets.length > 10) {
@@ -419,9 +429,9 @@ ${message.message}`);
                     if (currentPanel) {
                         await vscode.commands.executeCommand('jira-assistant.openPanel');
                     }
-                    outputChannel.appendLine(`Ticket received: ${latestTicket.ticket_key}`);
+                    outputChannel.appendLine(`Ticket received: ${latestTicket?.key}`);
                     const action = await vscode.window.showInformationMessage(`New Jira ticket assigned:
-${latestTicket.ticket_key}
+${latestTicket?.key}
 
 ${latestTicket.title}`, 'Open Ticket', 'Add Context', 'Ignore');
                     if (action === 'Open Ticket') {

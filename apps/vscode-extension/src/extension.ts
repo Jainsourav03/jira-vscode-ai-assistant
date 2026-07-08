@@ -1,18 +1,21 @@
 import * as vscode from 'vscode';
 import WebSocket = require('ws');
-
-let latestTicket: any;
+import {
+    Ticket,
+    TicketAssignedEvent,
+    TicketMetadata,
+    DeveloperContextSubmission,
+    ConnectionStatus,
+	 SubmitContextMessage,
+    WebviewReadyMessage
+} from './types';
+let latestTicket: Ticket | undefined;
 let socket: WebSocket | undefined;
-let connectionStatus:
-'connected' |
-'disconnected' |
-'connecting' =
+let connectionStatus: ConnectionStatus =
 'disconnected';
-
-let currentPanel: any;
+let currentPanel: vscode.WebviewPanel | undefined;
 let isAutoConnect = false;
 let reconnectAttempts = 0;
-
 const reconnectDelays = [
     2000,
     5000,
@@ -22,7 +25,7 @@ const reconnectDelays = [
 ];
 
 let reconnectTimer: NodeJS.Timeout | undefined;
-let recentTickets: typeof latestTicket[] = [];
+let recentTickets:Ticket[]=[];
 
 export function activate(context: vscode.ExtensionContext) {
 
@@ -116,8 +119,9 @@ outputChannel.appendLine(
 					enableScripts: true
 				}
 			);
-			currentPanel.webview.onDidReceiveMessage(
-(message:any)=>{
+
+currentPanel?.webview.onDidReceiveMessage(
+(message:WebviewReadyMessage)=>{
 
 if(
 message.type===
@@ -136,8 +140,8 @@ type:
 }
 );
 
-currentPanel.webview.onDidReceiveMessage(
-async (message:any)=>{
+currentPanel?.webview.onDidReceiveMessage(
+async (message:SubmitContextMessage)=>{
 
 if(
 message.type===
@@ -146,10 +150,37 @@ message.type===
 
 try{
 
+	const userEmail =
+vscode.workspace
+.getConfiguration('jiraAssistant')
+.get<string>('userEmail');
+
+if (!userEmail) {
+
+    vscode.window.showErrorMessage(
+        'Please configure jiraAssistant.userEmail'
+    );
+
+    return;
+
+}
+
+	const request: DeveloperContextSubmission = {
+
+    userEmail: userEmail,
+
+    additionalContext: message.additionalContext,
+
+    repoPath:
+    vscode.workspace.workspaceFolders?.[0]
+    ?.uri.fsPath
+
+};
+
 const response =
 await fetch(
 
-`${backendUrl}/tickets/${latestTicket?.ticket_key}/developer-context`,
+`${backendUrl}/tickets/${latestTicket?.key}/developer-context`,
 
 {
 
@@ -162,19 +193,7 @@ headers:{
 },
 
 body:
-JSON.stringify({
-
-userEmail:
-userEmail,
-
-additionalContext:
-message.additionalContext,
-
-repoPath:
-vscode.workspace.workspaceFolders?.[0]
-?.uri.fsPath
-
-})
+JSON.stringify(request)
 
 }
 
@@ -185,7 +204,7 @@ response.ok
 ){
 
 	outputChannel.appendLine(
-`Context submitted: ${latestTicket?.ticket_key}`
+`Context submitted: ${latestTicket?.key}`
 );
 
 vscode.window.showInformationMessage(
@@ -226,7 +245,7 @@ vscode.window.showErrorMessage(
 <h2>Jira Ticket Details</h2>
 
 <p><b>Ticket Key:</b>
-${latestTicket?.ticket_key ?? 'No Ticket'}
+${latestTicket?.key ?? 'No Ticket'}
 </p>
 
 <p><b>Title:</b>
@@ -250,14 +269,14 @@ ${latestTicket?.comments ?? 'No Comments'}
 </p>
 
 <p><b>Assignee Email:</b>
-${latestTicket?.assignee_email ?? 'Unassigned'}
+${latestTicket?.assigneeEmail ?? 'Unassigned'}
 </p>
 
 <p>
 <b>Jira Link:</b>
 
 <a
-href="${latestTicket?.jira_link ?? 'https://jira.atlassian.com'}"
+href="${latestTicket?.url ?? 'https://jira.atlassian.com'}"
 >
 Open Jira Ticket
 </a>
@@ -331,7 +350,7 @@ document
 vscode.postMessage({
 type:'submitContext',
 ticketKey:
-"${latestTicket?.ticket_key}",
+"${latestTicket?.key}",
 additionalContext:text
 });
 }		
@@ -425,7 +444,7 @@ await vscode.commands.executeCommand(
 setTimeout(
 ()=>{
 
-currentPanel.webview.postMessage({
+currentPanel?.webview.postMessage({
 
 type:
 'focusContext'
@@ -773,30 +792,36 @@ return;
 }
 
 latestTicket = {
-	
 
-ticket_key:
+key:
 message.ticket_key,
 
 title:
 message.ticket_title,
- status:
- message.ticket_status,
-
-priority:
-message.ticket_priority,
 
 description:
 message.ticket_description,
 
+status:
+message.ticket_status,
+
+priority:
+message.ticket_priority,
+
+url:
+message.ticket_url,
+
+assigneeEmail:
+message.assignee_email,
+
 comments:
-message.comments,
+message.comments?.map(
+(body:string)=>({
 
-jira_link:
-message.jira_link,
+body
 
-assignee_email:
-message.assignee_email
+})
+)
 
 };
 recentTickets.unshift(
@@ -818,14 +843,14 @@ await vscode.commands.executeCommand(
 
 }
 outputChannel.appendLine(
-    `Ticket received: ${latestTicket.ticket_key}`
+    `Ticket received: ${latestTicket?.key}`
 );
 
 const action =
 await vscode.window.showInformationMessage(
 
 `New Jira ticket assigned:
-${latestTicket.ticket_key}
+${latestTicket?.key}
 
 ${latestTicket.title}`,
 
