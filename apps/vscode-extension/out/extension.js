@@ -18,6 +18,7 @@ const reconnectDelays = [
     30000
 ];
 let reconnectTimer;
+let recentTickets = [];
 function activate(context) {
     let clientId = context.globalState.get('clientId');
     if (!clientId) {
@@ -361,6 +362,9 @@ box.focus();
                     'client_registered') {
                     if (message.status ===
                         'success') {
+                        connectionStatus =
+                            'connected';
+                        updateStatusBar();
                         outputChannel.appendLine(`Registration success: ${message.userEmail}`);
                         vscode.window.showInformationMessage(`Registered successfully as ${message.userEmail}`);
                     }
@@ -373,9 +377,31 @@ box.focus();
                     }
                     return;
                 }
+                if (message.type ===
+                    'heartbeat') {
+                    outputChannel.appendLine('Heartbeat received');
+                    /* Reply to backend */
+                    socket?.send(JSON.stringify({
+                        type: 'heartbeat_ack'
+                    }));
+                    return;
+                }
+                if (message.type ===
+                    'error') {
+                    outputChannel.appendLine(`Backend error:
+${message.message}`);
+                    vscode.window.showWarningMessage(message.message);
+                    return;
+                }
                 /* Ticket */
-                if (message.ticket_key &&
-                    message.ticket_title) {
+                if (message.event_type ===
+                    'ticket_assigned') {
+                    if (!message.ticket_key ||
+                        !message.ticket_title) {
+                        outputChannel.appendLine('Invalid ticket_assigned event');
+                        vscode.window.showWarningMessage('Invalid ticket received from backend.');
+                        return;
+                    }
                     latestTicket = {
                         ticket_key: message.ticket_key,
                         title: message.ticket_title,
@@ -386,6 +412,13 @@ box.focus();
                         jira_link: message.jira_link,
                         assignee_email: message.assignee_email
                     };
+                    recentTickets.unshift(latestTicket);
+                    if (recentTickets.length > 10) {
+                        recentTickets.pop();
+                    }
+                    if (currentPanel) {
+                        await vscode.commands.executeCommand('jira-assistant.openPanel');
+                    }
                     outputChannel.appendLine(`Ticket received: ${latestTicket.ticket_key}`);
                     const action = await vscode.window.showInformationMessage(`New Jira ticket assigned:
 ${latestTicket.ticket_key}
@@ -400,6 +433,7 @@ ${latestTicket.title}`, 'Open Ticket', 'Add Context', 'Ignore');
                     }
                     return;
                 }
+                outputChannel.appendLine(`Unknown backend event: ${message.type ?? message.event_type ?? 'unknown'}`);
                 /* Unknown */
                 vscode.window.showWarningMessage('Unknown backend event');
             }

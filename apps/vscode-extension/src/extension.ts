@@ -22,6 +22,7 @@ const reconnectDelays = [
 ];
 
 let reconnectTimer: NodeJS.Timeout | undefined;
+let recentTickets: typeof latestTicket[] = [];
 
 export function activate(context: vscode.ExtensionContext) {
 
@@ -668,6 +669,11 @@ if(
 message.status===
 'success'
 ){
+	connectionStatus =
+'connected';
+
+updateStatusBar();
+
 	outputChannel.appendLine(
 `Registration success: ${message.userEmail}`
 );
@@ -700,14 +706,74 @@ return;
 
 
 
+if(
+message.type ===
+'heartbeat'
+){
+
+outputChannel.appendLine(
+'Heartbeat received'
+);
+
+/* Reply to backend */
+
+socket?.send(
+JSON.stringify({
+
+type:
+'heartbeat_ack'
+
+})
+);
+
+return;
+
+}
+
+
+if(
+message.type ===
+'error'
+){
+
+outputChannel.appendLine(
+`Backend error:
+${message.message}`
+);
+
+vscode.window.showWarningMessage(
+message.message
+);
+
+return;
+
+}
+
 /* Ticket */
 
 if(
-message.ticket_key &&
-message.ticket_title
+message.event_type ===
+'ticket_assigned'
+){
+	if(
+!message.ticket_key ||
+!message.ticket_title
 ){
 
+outputChannel.appendLine(
+'Invalid ticket_assigned event'
+);
+
+vscode.window.showWarningMessage(
+'Invalid ticket received from backend.'
+);
+
+return;
+
+}
+
 latestTicket = {
+	
 
 ticket_key:
 message.ticket_key,
@@ -733,6 +799,24 @@ assignee_email:
 message.assignee_email
 
 };
+recentTickets.unshift(
+latestTicket
+);
+
+if(
+recentTickets.length > 10
+){
+
+recentTickets.pop();
+
+}
+if(currentPanel){
+
+await vscode.commands.executeCommand(
+'jira-assistant.openPanel'
+);
+
+}
 outputChannel.appendLine(
     `Ticket received: ${latestTicket.ticket_key}`
 );
@@ -779,6 +863,9 @@ return;
 
 }
 
+outputChannel.appendLine(
+`Unknown backend event: ${message.type ?? message.event_type ?? 'unknown'}`
+);
 
 /* Unknown */
 
@@ -787,6 +874,7 @@ vscode.window.showWarningMessage(
 );
 
 }
+
 
 catch{
 
