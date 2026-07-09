@@ -33,6 +33,10 @@
   "command": "jira-assistant.showRecentTickets",
   "title": "Jira Assistant: Show Recent Tickets"
 },
+{
+  "command": "jira-assistant.openSettings",
+  "title": "Jira Assistant: Open Settings"
+},  
     {
       "command": "jira-assistant.mockTicket",
       "title": "Jira Assistant: Show Mock Ticket Notification"
@@ -42,11 +46,16 @@
       "title": "Jira Assistant: Connect Backend"
     },
     {
-"command":
-"jira-assistant.openLatestTicket",
-
-"title":
-"Jira Assistant: Open Latest Ticket"
+       "command":"jira-assistant.openLatestTicket",
+"title":"Jira Assistant: Open Latest Ticket"
+},
+{
+  "command": "jira-assistant.disconnectBackend",
+  "title": "Jira Assistant: Disconnect Backend"
+},
+{
+  "command": "jira-assistant.reconnectBackend",
+  "title": "Jira Assistant: Reconnect Backend"
 },
 
 {

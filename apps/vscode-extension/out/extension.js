@@ -124,6 +124,19 @@ function activate(context) {
 <body>
 
 <h2>Jira Ticket Details</h2>
+<div
+id="newTicketMessage"
+style="
+display:none;
+padding:10px;
+margin-bottom:10px;
+background:#fff3cd;
+border:1px solid #ffeeba;
+color:#856404;
+border-radius:4px;
+">
+A new Jira ticket has been received.
+</div>
 
 <p><b>Ticket Key:</b>
 ${latestTicket?.key ?? 'No Ticket'}
@@ -309,10 +322,28 @@ document.getElementById(
 if(box){
 
 box.focus();
+if(
+event.data.type===
+'newTicketReceived'
+){
+
+const msg =
+document.getElementById(
+'newTicketMessage'
+);
+
+if(msg){
+
+msg.style.display = "block";
 
 }
 
 }
+
+}
+
+}
+
 
 }
 );
@@ -349,6 +380,19 @@ box.focus();
         latestTicket =
             selected.ticket;
         await vscode.commands.executeCommand('jira-assistant.openPanel');
+    });
+    const disconnectBackend = vscode.commands.registerCommand('jira-assistant.disconnectBackend', () => {
+        socket?.close();
+        connectionStatus = 'disconnected';
+        vscode.window.showInformationMessage('Backend disconnected.');
+    });
+    const reconnectBackend = vscode.commands.registerCommand('jira-assistant.reconnectBackend', async () => {
+        socket?.close();
+        connectionStatus = 'disconnected';
+        await vscode.commands.executeCommand('jira-assistant.connectBackend');
+    });
+    const openSettings = vscode.commands.registerCommand('jira-assistant.openSettings', async () => {
+        await vscode.commands.executeCommand('workbench.action.openSettings', 'jiraAssistant');
     });
     const mockTicket = vscode.commands.registerCommand('jira-assistant.mockTicket', async () => {
         const action = await vscode.window.showInformationMessage('New Jira ticket assigned: PROJ-123 - Fix login redirect issue', 'Open Ticket', 'Add Context', 'Open in Jira', 'Ignore');
@@ -522,7 +566,12 @@ ${message.message}`);
                     // Save history
                     await context.workspaceState.update('recentTickets', recentTickets);
                     if (currentPanel) {
-                        await vscode.commands.executeCommand('jira-assistant.openPanel');
+                        currentPanel.webview.postMessage({
+                            type: 'newTicketReceived'
+                        });
+                        setTimeout(async () => {
+                            await vscode.commands.executeCommand('jira-assistant.openPanel');
+                        }, 1500);
                     }
                     outputChannel.appendLine(`Ticket received: ${latestTicket?.key}`);
                     const action = await vscode.window.showInformationMessage(`New Jira ticket assigned:
@@ -607,7 +656,7 @@ ${latestTicket.key} - ${latestTicket.title}`, 'Open Ticket', 'Add Context', 'Ope
                 break;
         }
     });
-    context.subscriptions.push(hello, openPanel, mockTicket, connectBackend, showConnectionStatus, statusBarMenu, statusBarItem, openLatestTicket, showRecentTickets, outputChannel);
+    context.subscriptions.push(hello, openPanel, openSettings, mockTicket, connectBackend, showConnectionStatus, statusBarMenu, statusBarItem, openLatestTicket, showRecentTickets, disconnectBackend, reconnectBackend, outputChannel);
     if (autoConnect &&
         userEmail &&
         userEmail.trim() !== '') {

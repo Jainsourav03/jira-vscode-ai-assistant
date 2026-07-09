@@ -272,6 +272,19 @@ vscode.window.showErrorMessage(
 <body>
 
 <h2>Jira Ticket Details</h2>
+<div
+id="newTicketMessage"
+style="
+display:none;
+padding:10px;
+margin-bottom:10px;
+background:#fff3cd;
+border:1px solid #ffeeba;
+color:#856404;
+border-radius:4px;
+">
+A new Jira ticket has been received.
+</div>
 
 <p><b>Ticket Key:</b>
 ${latestTicket?.key ?? 'No Ticket'}
@@ -457,10 +470,28 @@ document.getElementById(
 if(box){
 
 box.focus();
+if(
+event.data.type===
+'newTicketReceived'
+){
+
+const msg =
+document.getElementById(
+'newTicketMessage'
+);
+
+if(msg){
+
+msg.style.display = "block";
 
 }
 
 }
+
+}
+
+}
+
 
 }
 );
@@ -549,6 +580,54 @@ await vscode.commands.executeCommand(
 }
 );
 
+
+const disconnectBackend =
+vscode.commands.registerCommand(
+'jira-assistant.disconnectBackend',
+()=>{
+
+socket?.close();
+
+connectionStatus = 'disconnected';
+
+vscode.window.showInformationMessage(
+'Backend disconnected.'
+);
+
+}
+);
+
+
+const reconnectBackend =
+vscode.commands.registerCommand(
+'jira-assistant.reconnectBackend',
+async ()=>{
+
+socket?.close();
+
+connectionStatus = 'disconnected';
+
+await vscode.commands.executeCommand(
+'jira-assistant.connectBackend'
+);
+
+}
+);
+
+
+
+const openSettings =
+vscode.commands.registerCommand(
+'jira-assistant.openSettings',
+async ()=>{
+
+await vscode.commands.executeCommand(
+'workbench.action.openSettings',
+'jiraAssistant'
+);
+
+}
+);
 	const mockTicket = vscode.commands.registerCommand(
 		'jira-assistant.mockTicket',
 		async () => {
@@ -995,8 +1074,23 @@ await context.workspaceState.update(
 );
 
 if(currentPanel){
+
+currentPanel.webview.postMessage({
+
+type:
+'newTicketReceived'
+
+});
+
+setTimeout(
+async ()=>{
+
 await vscode.commands.executeCommand(
 'jira-assistant.openPanel'
+);
+
+},
+1500
 );
 
 }
@@ -1241,6 +1335,7 @@ break;
 context.subscriptions.push(
 hello,
 openPanel,
+openSettings,
 mockTicket,
 connectBackend,
 showConnectionStatus,
@@ -1248,6 +1343,8 @@ statusBarMenu,
 statusBarItem,
 openLatestTicket,
 showRecentTickets,
+disconnectBackend,
+reconnectBackend,
 outputChannel
 );
 
