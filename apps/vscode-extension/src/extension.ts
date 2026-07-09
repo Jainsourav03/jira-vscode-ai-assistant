@@ -45,6 +45,15 @@ export function activate(context: vscode.ExtensionContext) {
 		);
 
 	}
+
+	 
+context.workspaceState.get<Ticket>(
+    'latestTicket'
+);
+recentTickets =
+context.workspaceState.get<Ticket[]>(
+    'recentTickets'
+) ?? [];
 	const statusBarItem =
 vscode.window.createStatusBarItem(
     vscode.StatusBarAlignment.Left,
@@ -119,7 +128,7 @@ outputChannel.appendLine(
 					enableScripts: true
 				}
 			);
-
+latestTicket
 currentPanel?.webview.onDidReceiveMessage(
 (message:WebviewReadyMessage)=>{
 
@@ -473,6 +482,61 @@ vscode.window.showInformationMessage(
 return;
 
 }
+
+await vscode.commands.executeCommand(
+'jira-assistant.openPanel'
+);
+
+}
+);
+
+const showRecentTickets =
+vscode.commands.registerCommand(
+'jira-assistant.showRecentTickets',
+async ()=>{
+
+if(recentTickets.length===0){
+
+vscode.window.showInformationMessage(
+'No recent Jira tickets.'
+);
+
+return;
+
+}
+
+outputChannel.appendLine(
+    `Recent ticket count: ${recentTickets.length}`
+);
+
+recentTickets.forEach((ticket, index) => {
+    outputChannel.appendLine(
+        `${index + 1}. ${ticket.key} - ${ticket.title}`
+    );
+});
+
+const selected =
+await vscode.window.showQuickPick(
+
+recentTickets.map(ticket=>({
+
+label:
+`${ticket.key} - ${ticket.title}`,
+
+ticket
+
+}))
+
+);
+
+if(!selected){
+
+return;
+
+}
+
+latestTicket =
+selected.ticket;
 
 await vscode.commands.executeCommand(
 'jira-assistant.openPanel'
@@ -899,28 +963,33 @@ message.assignee_email,
 
 receivedAt: new Date().toLocaleString(),
 
-
 comments:
 message.comments?.map(
 (body:string)=>({
-
 body
-
-})
-)
-
+}))
 };
-recentTickets.unshift(
-latestTicket
+await context.workspaceState.update(
+    'latestTicket',
+    latestTicket
+);
+// Remove duplicate if it already exists
+recentTickets = recentTickets.filter(
+    ticket => ticket.key !== latestTicket?.key
 );
 
-if(
-recentTickets.length > 10
-){
+// Add newest ticket to the front
+recentTickets.unshift(latestTicket);
 
-recentTickets.pop();
+// Keep only last 10
+recentTickets = recentTickets.slice(0, 10);
 
-}
+// Save history
+await context.workspaceState.update(
+    'recentTickets',
+    recentTickets
+);
+
 if(currentPanel){
 
 await vscode.commands.executeCommand(
@@ -1174,6 +1243,8 @@ connectBackend,
 showConnectionStatus,
 statusBarMenu,
 statusBarItem,
+openLatestTicket,
+showRecentTickets,
 outputChannel
 );
 

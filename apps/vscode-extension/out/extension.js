@@ -26,6 +26,9 @@ function activate(context) {
             `vscode-client-${Date.now()}`;
         context.globalState.update('clientId', clientId);
     }
+    context.workspaceState.get('latestTicket');
+    recentTickets =
+        context.workspaceState.get('recentTickets') ?? [];
     const statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 100);
     statusBarItem.command =
         'jira-assistant.statusBarMenu';
@@ -59,6 +62,7 @@ function activate(context) {
         currentPanel = vscode.window.createWebviewPanel('jiraAssistant', 'Jira Assistant - Ticket', vscode.ViewColumn.One, {
             enableScripts: true
         });
+        latestTicket;
         currentPanel?.webview.onDidReceiveMessage((message) => {
             if (message.type ===
                 'webviewReady') {
@@ -323,6 +327,26 @@ box.focus();
         }
         await vscode.commands.executeCommand('jira-assistant.openPanel');
     });
+    const showRecentTickets = vscode.commands.registerCommand('jira-assistant.showRecentTickets', async () => {
+        if (recentTickets.length === 0) {
+            vscode.window.showInformationMessage('No recent Jira tickets.');
+            return;
+        }
+        outputChannel.appendLine(`Recent ticket count: ${recentTickets.length}`);
+        recentTickets.forEach((ticket, index) => {
+            outputChannel.appendLine(`${index + 1}. ${ticket.key} - ${ticket.title}`);
+        });
+        const selected = await vscode.window.showQuickPick(recentTickets.map(ticket => ({
+            label: `${ticket.key} - ${ticket.title}`,
+            ticket
+        })));
+        if (!selected) {
+            return;
+        }
+        latestTicket =
+            selected.ticket;
+        await vscode.commands.executeCommand('jira-assistant.openPanel');
+    });
     const mockTicket = vscode.commands.registerCommand('jira-assistant.mockTicket', async () => {
         const action = await vscode.window.showInformationMessage('New Jira ticket assigned: PROJ-123 - Fix login redirect issue', 'Open Ticket', 'Add Context', 'Open in Jira', 'Ignore');
         if (action === 'Open Ticket') {
@@ -485,10 +509,15 @@ ${message.message}`);
                             body
                         }))
                     };
+                    await context.workspaceState.update('latestTicket', latestTicket);
+                    // Remove duplicate if it already exists
+                    recentTickets = recentTickets.filter(ticket => ticket.key !== latestTicket?.key);
+                    // Add newest ticket to the front
                     recentTickets.unshift(latestTicket);
-                    if (recentTickets.length > 10) {
-                        recentTickets.pop();
-                    }
+                    // Keep only last 10
+                    recentTickets = recentTickets.slice(0, 10);
+                    // Save history
+                    await context.workspaceState.update('recentTickets', recentTickets);
                     if (currentPanel) {
                         await vscode.commands.executeCommand('jira-assistant.openPanel');
                     }
@@ -575,7 +604,7 @@ ${latestTicket.key} - ${latestTicket.title}`, 'Open Ticket', 'Add Context', 'Ope
                 break;
         }
     });
-    context.subscriptions.push(hello, openPanel, mockTicket, connectBackend, showConnectionStatus, statusBarMenu, statusBarItem, outputChannel);
+    context.subscriptions.push(hello, openPanel, mockTicket, connectBackend, showConnectionStatus, statusBarMenu, statusBarItem, openLatestTicket, showRecentTickets, outputChannel);
     if (autoConnect &&
         userEmail &&
         userEmail.trim() !== '') {

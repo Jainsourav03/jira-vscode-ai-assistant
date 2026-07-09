@@ -22,9 +22,17 @@
       "title": "Jira Assistant: Hello"
     },
     {
+  "command": "jira-assistant.openLatestTicket",
+  "title": "Jira Assistant: Open Latest Ticket"
+},
+    {
       "command": "jira-assistant.openPanel",
       "title": "Jira Assistant: Open Panel"
     },
+    {
+  "command": "jira-assistant.showRecentTickets",
+  "title": "Jira Assistant: Show Recent Tickets"
+},
     {
       "command": "jira-assistant.mockTicket",
       "title": "Jira Assistant: Show Mock Ticket Notification"
