@@ -59,6 +59,9 @@ function activate(context) {
         vscode.window.showInformationMessage('Hello from Jira Assistant!');
     });
     const openPanel = vscode.commands.registerCommand('jira-assistant.openPanel', async () => {
+        if (currentPanel) {
+            currentPanel.dispose();
+        }
         currentPanel = vscode.window.createWebviewPanel('jiraAssistant', 'Jira Assistant - Ticket', vscode.ViewColumn.One, {
             enableScripts: true
         });

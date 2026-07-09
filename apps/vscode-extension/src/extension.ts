@@ -120,6 +120,10 @@ outputChannel.appendLine(
 		'jira-assistant.openPanel',
 		async () => {
 
+			if(currentPanel){
+        currentPanel.dispose();
+        }
+
 			currentPanel = vscode.window.createWebviewPanel(
 				'jiraAssistant',
 				'Jira Assistant - Ticket',
@@ -991,7 +995,6 @@ await context.workspaceState.update(
 );
 
 if(currentPanel){
-
 await vscode.commands.executeCommand(
 'jira-assistant.openPanel'
 );
