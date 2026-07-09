@@ -42,6 +42,7 @@ export type DeveloperContextSubmission = {
     userEmail: string;
     additionalContext: string;
     repoPath?: string;
+    activeFile?: string;
     branchName?: string;
     notes?: string;
 };

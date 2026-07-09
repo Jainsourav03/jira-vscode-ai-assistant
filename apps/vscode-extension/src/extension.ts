@@ -165,6 +165,10 @@ if (!userEmail) {
 
 }
 
+const activeFile =
+vscode.window.activeTextEditor
+?.document.uri.fsPath;
+
 	const request: DeveloperContextSubmission = {
 
     userEmail: userEmail,
@@ -173,7 +177,12 @@ if (!userEmail) {
 
     repoPath:
     vscode.workspace.workspaceFolders?.[0]
-    ?.uri.fsPath
+    ?.uri.fsPath,
+
+	activeFile,
+
+    notes: ""
+
 
 };
 
