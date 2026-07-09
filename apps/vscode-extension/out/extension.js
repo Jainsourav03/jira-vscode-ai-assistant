@@ -69,7 +69,7 @@ function activate(context) {
         });
         currentPanel?.webview.onDidReceiveMessage(async (message) => {
             if (message.type ===
-                'submitContext') {
+                'submit_context') {
                 try {
                     const userEmail = vscode.workspace
                         .getConfiguration('jiraAssistant')
@@ -233,7 +233,7 @@ document
 "contextBox"
 ).value;
 vscode.postMessage({
-type:'submitContext',
+type:'submit_context',
 ticketKey:
 "${latestTicket?.key}",
 additionalContext:text

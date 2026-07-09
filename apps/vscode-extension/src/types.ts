@@ -46,7 +46,7 @@ export type DeveloperContextSubmission = {
     notes?: string;
 };
 export type SubmitContextMessage = {
-    type: 'submitContext';
+    type: 'submit_context';
     ticketKey: string;
     additionalContext: string;
 };

@@ -145,7 +145,7 @@ async (message:SubmitContextMessage)=>{
 
 if(
 message.type===
-'submitContext'
+'submit_context'
 ){
 
 try{
@@ -199,9 +199,8 @@ JSON.stringify(request)
 
 );
 
-if(
-response.ok
-){
+if(response.ok)
+{
 
 	outputChannel.appendLine(
 `Context submitted: ${latestTicket?.key}`
@@ -365,7 +364,7 @@ document
 "contextBox"
 ).value;
 vscode.postMessage({
-type:'submitContext',
+type:'submit_context',
 ticketKey:
 "${latestTicket?.key}",
 additionalContext:text
