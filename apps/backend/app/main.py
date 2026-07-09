@@ -14,7 +14,6 @@ logger = logging.getLogger(__name__)
 app = FastAPI(title="Jira VS Code Assistant Backend")
 
 # Storage
-# Storage
 
 clients_by_email = {}
 
@@ -34,7 +33,6 @@ class MockTicketRequest(BaseModel):
     title: str = Field(..., min_length=1)
 
 # Create Mock Ticket
-
 
     assigneeEmail: str = Field(..., min_length=1)
     ticketKey: str = Field(..., min_length=1)
@@ -125,7 +123,6 @@ def register_client(email, client_id, websocket):
             "last_seen": datetime.now().isoformat()
         }
     )
-
     logger.info(f"{email} -> {client_id} registered")
 
 # Send Ticket
@@ -142,11 +139,6 @@ async def send_ticket_to_clients(ticket, event=None):
     if event is None:
         event = normalize_ticket_event(ticket)
 
-    # If no normalized event was provided (e.g. mock ticket),
-    # create one automatically.
-    if event is None:
-        event = normalize_ticket_event(ticket)
-
     dead_clients = []
 
     for client in clients_by_email[email]:
@@ -155,9 +147,7 @@ async def send_ticket_to_clients(ticket, event=None):
 
             client["last_seen"] = datetime.now().isoformat()
 
-            logger.info(
-                f"Ticket sent to {email} ({client['client_id']})"
-            )
+            logger.info(f"Ticket sent to {email} ({client['client_id']})")
 
         except Exception as e:
             logger.error(str(e))
@@ -229,7 +219,6 @@ def get_connected_clients():
                 for client in clients
             ]
         }
-
     return response
 
 # Ticket History
@@ -268,6 +257,7 @@ def get_ticket_developer_context(ticket_key: str):
     }
 
 #dilivery history
+
 @app.get("/dev/delivery-history")
 def get_delivery_history(ticketKey: str | None = None):
 
@@ -461,11 +451,10 @@ async def jira_assignment_webhook(
         "message": "No active VS Code client found for assignee"
     }
 
-
-
 # Developer Context Submit
 
 @app.post("/tickets/{ticket_key}/developer-context")
+
 def submit_developer_context(
     ticket_key: str,
     request: DeveloperContextRequest
@@ -501,7 +490,6 @@ def submit_developer_context(
     }
 
 # WebSocket Endpoint
-
 
 @app.websocket("/ws/client")
 async def websocket_client(websocket: WebSocket):

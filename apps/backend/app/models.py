@@ -1,12 +1,11 @@
-from pydantic import BaseModel, Field, model_validator
 from datetime import datetime
 from typing import List
 
-# Jira Ticket Event Model
-# Jira Ticket Event Model
+from pydantic import BaseModel, Field, ConfigDict, model_validator
+
+# Jira Ticket Event
 
 class JiraTicketEvent(BaseModel):
-
     event_type: str = Field(..., min_length=1)
     ticket_key: str = Field(..., min_length=1)
     ticket_title: str = Field(..., min_length=1)
@@ -14,66 +13,27 @@ class JiraTicketEvent(BaseModel):
     ticket_status: str = Field(..., min_length=1)
     ticket_priority: str = Field(..., min_length=1)
     ticket_url: str = Field(..., min_length=1)
-
-    event_type: str = Field(..., min_length=1)
-    ticket_key: str = Field(..., min_length=1)
-    ticket_title: str = Field(..., min_length=1)
-    ticket_description: str = Field(..., min_length=1)
-    ticket_status: str = Field(..., min_length=1)
-    ticket_priority: str = Field(..., min_length=1)
-    ticket_url: str = Field(..., min_length=1)
-    comments: List[str]
+    comments: List[str] = Field(default_factory=list)
     assignee_email: str = Field(..., min_length=1)
 
-# Task 8 - Ticket Comments Model
+# Ticket Comment
 
 class TicketComment(BaseModel):
-
     comment: str = Field(..., min_length=1)
 
 # VS Code Client Registration
 
 class ClientRegistrationRequest(BaseModel):
-
     type: str = Field(..., min_length=1)
     userEmail: str = Field(..., min_length=1)
     clientId: str = Field(..., min_length=1)
 
-    # Important:VS Code extension can send extra information also
-    
-    class Config:
-        extra = "allow"
-
-# Developer Context Submission
-
-    assignee_email: str = Field(..., min_length=1)
-
-# Task 8 - Ticket Comments Model
-
-class TicketComment(BaseModel):
-
-    comment: str = Field(..., min_length=1)
-
-# VS Code Client Registration
-
-class ClientRegistrationRequest(BaseModel):
-
-    type: str = Field(..., min_length=1)
-    userEmail: str = Field(..., min_length=1)
-    clientId: str = Field(..., min_length=1)
-
-    # Important:VS Code extension can send extra information also
-    
-    class Config:
-        extra = "allow"
+    # Allow additional fields from the VS Code extension
+    model_config = ConfigDict(extra="allow")
 
 # Developer Context Submission
 
 class DeveloperContextRequest(BaseModel):
-
-    userEmail: str = Field(..., min_length=1)
-    additionalContext: str = Field(..., min_length=1)
-
     userEmail: str = Field(..., min_length=1)
     additionalContext: str = Field(..., min_length=1)
 
@@ -82,40 +42,28 @@ class DeveloperContextRequest(BaseModel):
     branchName: str | None = None
     notes: str | None = None
 
-# --------------------------------------
-# Task 8 - Jira Webhook Payload
-# --------------------------------------
+# Jira Webhook Payload
 
 class JiraWebhookPayload(BaseModel):
-
     eventType: str = Field(...)
 
     issueKey: str = Field(...)
-
     summary: str = Field(...)
-
     description: str | None = None
-
     status: str | None = None
-
     priority: str | None = None
 
     issueUrl: str = Field(...)
 
     assigneeEmail: str | None = None
-
     assigneeDisplayName: str | None = None
-
     assigneeAccountId: str | None = None
 
     projectKey: str | None = None
-
     createdAt: str | None = None
 
     @model_validator(mode="after")
     def validate_payload(self):
-
-        # Treat empty strings as missing values
         if self.issueKey.strip() == "":
             self.issueKey = None
 
@@ -147,9 +95,7 @@ class JiraWebhookPayload(BaseModel):
 
         return self
 
-# ------------------------------
-# Task 10 - Internal Ticket Event
-# ------------------------------
+# Internal Ticket Models
 
 class InternalTicket(BaseModel):
     key: str
@@ -161,26 +107,20 @@ class InternalTicket(BaseModel):
     assigneeEmail: str
     assigneeDisplayName: str | None = None
     projectKey: str | None = None
-    comments: list[str] = []
-
+    comments: List[str] = Field(default_factory=list)
 
 class EventMetadata(BaseModel):
     source: str
     eventId: str
     createdAt: str
 
-
 class InternalTicketEvent(BaseModel):
     type: str
     ticket: InternalTicket
     metadata: EventMetadata
 
-# --------------------------------------
-# Task 9 - Assignee Mapping
-# --------------------------------------
+# Assignee Mapping
 
 class AssigneeMappingRequest(BaseModel):
-
     accountId: str = Field(..., min_length=1)
-
     email: str = Field(..., min_length=1)
