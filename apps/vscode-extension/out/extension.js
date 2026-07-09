@@ -78,11 +78,15 @@ function activate(context) {
                         vscode.window.showErrorMessage('Please configure jiraAssistant.userEmail');
                         return;
                     }
+                    const activeFile = vscode.window.activeTextEditor
+                        ?.document.uri.fsPath;
                     const request = {
                         userEmail: userEmail,
                         additionalContext: message.additionalContext,
                         repoPath: vscode.workspace.workspaceFolders?.[0]
-                            ?.uri.fsPath
+                            ?.uri.fsPath,
+                        activeFile,
+                        notes: ""
                     };
                     const response = await fetch(`${backendUrl}/tickets/${latestTicket?.key}/developer-context`, {
                         method: 'POST',
@@ -96,11 +100,13 @@ function activate(context) {
                         vscode.window.showInformationMessage('Context submitted successfully');
                     }
                     else {
-                        vscode.window.showErrorMessage('Backend rejected context');
+                        outputChannel.appendLine('Backend rejected developer context');
+                        vscode.window.showErrorMessage('Failed to submit context. Check Jira Assistant output logs.');
                     }
                 }
-                catch {
-                    vscode.window.showErrorMessage('Failed to submit context');
+                catch (error) {
+                    outputChannel.appendLine(`Context submission failed: ${error}`);
+                    vscode.window.showErrorMessage('Failed to submit context. Check Jira Assistant output logs.');
                 }
             }
         });
@@ -168,6 +174,10 @@ id="contextBox"
 placeholder="Additional context"
 style="width:100%;height:120px;"
 ></textarea>
+<p
+id="errorMsg"
+style="color:red;margin-top:5px;"
+></p>
 
 <br><br>
 
@@ -232,6 +242,20 @@ document
 .getElementById(
 "contextBox"
 ).value;
+const error =
+document.getElementById(
+"errorMsg"
+);
+if(text.trim()===""){
+
+error.innerText =
+"Cannot submit empty context.";
+
+return;
+
+}
+error.innerText = "";
+
 vscode.postMessage({
 type:'submit_context',
 ticketKey:
