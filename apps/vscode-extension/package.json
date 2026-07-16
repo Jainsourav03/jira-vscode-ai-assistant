@@ -13,8 +13,14 @@
     "onCommand:jira-assistant.openPanel",
     "onCommand:jira-assistant.mockTicket",
     "onCommand:jira-assistant.connectBackend",
-    "onCommand:jira-assistant.openLatestTicket"
-  ],
+    "onCommand:jira-assistant.openLatestTicket",
+    "onCommand:jira-assistant.openSettings",
+    "onCommand:jira-assistant.showConnectionStatus",
+    "onCommand:jira-assistant.statusBarMenu",
+    "onCommand:jira-assistant.showRecentTickets",
+    "onCommand:jira-assistant.disconnectBackend",
+    "onCommand:jira-assistant.reconnectBackend"
+],
   "contributes": {
   "commands": [
     {

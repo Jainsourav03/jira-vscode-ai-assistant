@@ -9,12 +9,22 @@ import {
 	 SubmitContextMessage,
     WebviewReadyMessage
 } from './types';
+function escapeHtml(value: string | undefined | null): string {
+    if (value === undefined || value === null) return '';
+    return String(value)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
 let latestTicket: Ticket | undefined;
 let socket: WebSocket | undefined;
 let connectionStatus: ConnectionStatus =
 'disconnected';
 let currentPanel: vscode.WebviewPanel | undefined;
 let isAutoConnect = false;
+let isManualDisconnect = false;
 let reconnectAttempts = 0;
 const reconnectDelays = [
     2000,
@@ -47,9 +57,7 @@ export function activate(context: vscode.ExtensionContext) {
 	}
 
 	 
-context.workspaceState.get<Ticket>(
-    'latestTicket'
-);
+latestTicket = context.workspaceState.get<Ticket>('latestTicket');
 recentTickets =
 context.workspaceState.get<Ticket[]>(
     'recentTickets'
@@ -97,15 +105,6 @@ function updateStatusBar() {
     }
 
 }
-const outputChannel =
-vscode.window.createOutputChannel(
-    'Jira Assistant'
-);
-
-outputChannel.show(true);
-outputChannel.appendLine(
-        'Extension activated'
-    );
 
 	const hello = vscode.commands.registerCommand(
 		'jira-assistant.hello',
@@ -132,7 +131,7 @@ outputChannel.appendLine(
 					enableScripts: true
 				}
 			);
-latestTicket
+
 currentPanel?.webview.onDidReceiveMessage(
 (message:WebviewReadyMessage)=>{
 
@@ -163,15 +162,22 @@ message.type===
 
 try{
 
-	const userEmail =
-vscode.workspace
-.getConfiguration('jiraAssistant')
-.get<string>('userEmail');
+	const { userEmail, backendUrl } = getConfig();
 
 if (!userEmail) {
 
     vscode.window.showErrorMessage(
         'Please configure jiraAssistant.userEmail'
+    );
+
+    return;
+
+}
+
+if (!backendUrl) {
+
+    vscode.window.showErrorMessage(
+        'Please configure jiraAssistant.backendUrl'
     );
 
     return;
@@ -268,239 +274,103 @@ vscode.window.showErrorMessage(
 			currentPanel.webview.html = `
 <!DOCTYPE html>
 <html>
-
 <body>
+    <h2>Jira Ticket Details</h2>
 
-<h2>Jira Ticket Details</h2>
-<div
-id="newTicketMessage"
-style="
-display:none;
-padding:10px;
-margin-bottom:10px;
-background:#fff3cd;
-border:1px solid #ffeeba;
-color:#856404;
-border-radius:4px;
-">
-A new Jira ticket has been received.
-</div>
+    <div id="newTicketMessage" style="display:none; padding:10px; margin-bottom:10px; background:#fff3cd; border:1px solid #ffeeba; color:#856404; border-radius:4px;">
+        A new Jira ticket has been received.
+    </div>
 
-<p><b>Ticket Key:</b>
-${latestTicket?.key ?? 'No Ticket'}
-</p>
+    <p><b>Ticket Key:</b> ${escapeHtml(latestTicket?.key) || 'No Ticket'}</p>
+    <p><b>Title:</b> ${escapeHtml(latestTicket?.title) || 'No Title'}</p>
+    <p><b>Status:</b> ${escapeHtml(latestTicket?.status) || 'Not Available'}</p>
+    <p><b>Priority:</b> ${escapeHtml(latestTicket?.priority) || 'Medium'}</p>
+    <p><b>Project Key:</b> ${escapeHtml(latestTicket?.projectKey) || 'N/A'}</p>
+    <p><b>Description:</b> ${escapeHtml(latestTicket?.description) || 'No Description'}</p>
 
-<p><b>Title:</b>
-${latestTicket?.title ?? 'No Title'}
-</p>
+    ${
+        latestTicket?.comments
+            ?.map(comment => `<p>${escapeHtml(comment.body)}</p>`)
+            .join("") || "No Comments"
+    }
 
-<p><b>Status:</b>
-${latestTicket?.status ?? 'Not Available'}
-</p>
+    <p><b>Assignee Email:</b> ${escapeHtml(latestTicket?.assigneeEmail) || 'Unassigned'}</p>
+    <p><b>Assignee Name:</b> ${escapeHtml(latestTicket?.assigneeDisplayName) || 'N/A'}</p>
 
-<p><b>Priority:</b>
-${latestTicket?.priority ?? 'Medium'}
-</p>
-<p><b>Project Key:</b>
-${latestTicket?.projectKey ?? 'N/A'}
-</p>
+    <p>
+        <b>Jira Link:</b>
+        <a href="${escapeHtml(latestTicket?.url) || 'https://jira.atlassian.com'}">Open Jira Ticket</a>
+    </p>
 
-<p><b>Description:</b>
-${latestTicket?.description ?? 'No Description'}
-</p>
+    <p><b>Received:</b> ${escapeHtml(latestTicket?.receivedAt) || 'N/A'}</p>
 
-${latestTicket?.comments
-?.map(comment => comment.body)
-.join("<br>") ?? "No Comments"}
+    <br>
 
-<p><b>Assignee Email:</b>
-${latestTicket?.assigneeEmail ?? 'Unassigned'}
-</p>
+    <textarea id="contextBox" placeholder="Additional context" style="width:100%; height:120px;"></textarea>
+    <p id="errorMsg" style="color:red; margin-top:5px;"></p>
 
-<p><b>Assignee Name:</b>
-${latestTicket?.assigneeDisplayName ?? 'N/A'}
-</p>
+    <br><br>
 
-<p>
-<b>Jira Link:</b>
+    <button id="submitBtn">Submit Context</button>
+    <button id="runBtn" disabled>Run AI</button>
+    <p>AI integration is not enabled in this MVP.</p>
+    <button id="clearBtn">Clear Context</button>
 
-<a
-href="${latestTicket?.url ?? 'https://jira.atlassian.com'}"
->
-Open Jira Ticket
-</a>
+    <div id="result"></div>
 
-</p>
-<p><b>Received:</b>
-${latestTicket?.receivedAt ?? 'N/A'}
-</p>
+    <script>
+        const vscode = acquireVsCodeApi();
 
-<br>
+        // Tell extension webview finished loading
+        window.onload = () => {
+            vscode.postMessage({ type: 'webviewReady' });
+        };
 
-<textarea
-id="contextBox"
-placeholder="Additional context"
-style="width:100%;height:120px;"
-></textarea>
-<p
-id="errorMsg"
-style="color:red;margin-top:5px;"
-></p>
+        document.getElementById("runBtn").addEventListener("click", function () {
+            document.getElementById("result").innerText =
+                "AI integration will be added in a later phase.";
+        });
 
-<br><br>
+        document.getElementById("submitBtn").addEventListener("click", function () {
+            const text = document.getElementById("contextBox").value;
+            const error = document.getElementById("errorMsg");
 
-<button id="submitBtn">
-Submit Context
-</button>
+            if (text.trim() === "") {
+                error.innerText = "Cannot submit empty context.";
+                return;
+            }
 
-<button id="runBtn" disabled>
-Run AI
-</button>
+            error.innerText = "";
 
-<p>
-AI integration is not enabled in this MVP.
-</p>
-<button id="clearBtn">
-Clear Context
-</button>
+            vscode.postMessage({
+                type: 'submit_context',
+                ticketKey: "${escapeHtml(latestTicket?.key)}",
+                additionalContext: text
+            });
+        });
 
-<div id="result"></div>
-<script>
+        document.getElementById("clearBtn").addEventListener("click", function () {
+            document.getElementById("contextBox").value = "";
+        });
 
-const vscode =
-acquireVsCodeApi();
+        // Receive messages from the extension
+        window.addEventListener('message', (event) => {
+            if (event.data.type === 'focusContext') {
+                document.getElementById('contextBox')?.focus();
+            }
 
-/* Tell extension webview finished loading */
-
-window.onload =
-()=>{
-
-vscode.postMessage({
-
-type:
-'webviewReady'
-
-});
-
-};
-
-document
-.getElementById("runBtn")
-.addEventListener(
-"click",
-function(){
-
-document
-.getElementById("result")
-.innerText =
-"AI integration will be added in a later phase.";
-
-}
-);
-document
-.getElementById(
-"submitBtn"
-)
-.addEventListener(
-"click",
-function(){
-
-const text =
-document
-.getElementById(
-"contextBox"
-).value;
-const error =
-document.getElementById(
-"errorMsg"
-);
-if(text.trim()===""){
-
-error.innerText =
-"Cannot submit empty context.";
-
-return;
-
-}
-error.innerText = "";
-
-vscode.postMessage({
-type:'submit_context',
-ticketKey:
-"${latestTicket?.key}",
-additionalContext:text
-});
-}		
-);
-
-document
-.getElementById(
-"clearBtn"
-)
-.addEventListener(
-"click",
-function(){
-
-document
-.getElementById(
-"contextBox"
-).value = "";
-
-}
-);
-
-
-
-/* Receive messages */
-
-window.addEventListener(
-'message',
-(event)=>{
-
-if(
-event.data.type===
-'focusContext'
-){
-
-const box =
-document.getElementById(
-'contextBox'
-);
-
-if(box){
-
-box.focus();
-if(
-event.data.type===
-'newTicketReceived'
-){
-
-const msg =
-document.getElementById(
-'newTicketMessage'
-);
-
-if(msg){
-
-msg.style.display = "block";
-
-}
-
-}
-
-}
-
-}
-
-
-}
-);
-
-</script>
+            if (event.data.type === 'newTicketReceived') {
+                const msg = document.getElementById('newTicketMessage');
+                if (msg) {
+                    msg.style.display = "block";
+                }
+            }
+        });
+    </script>
 </body>
 </html>
 `;
-return currentPanel;
+			return currentPanel;
 		}
 	);
 	const openLatestTicket =
@@ -524,6 +394,16 @@ await vscode.commands.executeCommand(
 
 }
 );
+const outputChannel =
+vscode.window.createOutputChannel(
+    'Jira Assistant'
+);
+
+outputChannel.show(true);
+outputChannel.appendLine(
+        'Extension activated'
+    );
+
 
 const showRecentTickets =
 vscode.commands.registerCommand(
@@ -586,9 +466,12 @@ vscode.commands.registerCommand(
 'jira-assistant.disconnectBackend',
 ()=>{
 
+isManualDisconnect = true;
+
 socket?.close();
 
 connectionStatus = 'disconnected';
+updateStatusBar();
 
 vscode.window.showInformationMessage(
 'Backend disconnected.'
@@ -596,7 +479,6 @@ vscode.window.showInformationMessage(
 
 }
 );
-
 
 const reconnectBackend =
 vscode.commands.registerCommand(
@@ -694,34 +576,16 @@ else if(action === 'Open in Jira'){
 	
 	);
 
-	const config =
-	vscode.workspace.getConfiguration(
-		'jiraAssistant'
-	);
-
-	const backendUrl =
-	config.get<string>(
-		'backendUrl'
-	);
-
-	const websocketUrl =
-	config.get<string>(
-		'websocketUrl'
-	);
-const autoConnect =
-config.get<boolean>(
-'autoConnect'
-);
-
-const showNotifications =
-config.get<boolean>(
-'showNotifications'
-);
-	const userEmail =
-	config.get<string>(
-		'userEmail'
-	);
-
+	function getConfig() {
+		const config = vscode.workspace.getConfiguration('jiraAssistant');
+		return {
+			backendUrl: config.get<string>('backendUrl'),
+			websocketUrl: config.get<string>('websocketUrl'),
+			autoConnect: config.get<boolean>('autoConnect'),
+			showNotifications: config.get<boolean>('showNotifications'),
+			userEmail: config.get<string>('userEmail')
+		};
+	}
 	function scheduleReconnect() {
 
     if (reconnectTimer) {
@@ -759,7 +623,7 @@ vscode.commands.registerCommand(
 'jira-assistant.connectBackend',
 () => {
 
-	reconnectAttempts = 0;
+const { backendUrl, websocketUrl, userEmail } = getConfig();
 
 if (reconnectTimer) {
     clearTimeout(reconnectTimer);
@@ -793,6 +657,9 @@ updateStatusBar();
 
 if(!backendUrl){
 
+connectionStatus = 'disconnected';
+updateStatusBar();
+
 vscode.window.showErrorMessage(
 'Please configure jiraAssistant.backendUrl before connecting.'
 );
@@ -802,6 +669,9 @@ return;
 }
 
 if(!websocketUrl){
+
+connectionStatus = 'disconnected';
+updateStatusBar();
 
 vscode.window.showErrorMessage(
 'Please configure jiraAssistant.websocketUrl before connecting.'
@@ -813,30 +683,14 @@ return;
 
 if(!userEmail || userEmail.trim() === ''){
 
+connectionStatus = 'disconnected';
+updateStatusBar();
+
 vscode.window.showErrorMessage(
 'Please configure jiraAssistant.userEmail before connecting.'
 );
 
 return;
-
-}
-
-if (
-	!websocketUrl ||
-	(
-		!websocketUrl.startsWith('ws://') &&
-		!websocketUrl.startsWith('wss://')
-	)
-) {
-
-	connectionStatus = 'disconnected';
-	updateStatusBar();
-
-	vscode.window.showErrorMessage(
-		'Invalid WebSocket URL.'
-	);
-
-	return;
 
 }
 outputChannel.appendLine(
@@ -944,8 +798,11 @@ outputChannel.appendLine(
 );
 
 vscode.window.showErrorMessage(
-connectionStatus
+'Registration failed. Check your configured email and try again.'
 );
+
+isManualDisconnect = true;
+socket?.close();
 
 }
 
@@ -1209,7 +1066,11 @@ socket.on(
         'Disconnection'
     );
 
-		scheduleReconnect();
+		if (!isManualDisconnect) {
+            scheduleReconnect();
+        }
+
+        isManualDisconnect = false;
 
     }
 );
@@ -1347,7 +1208,7 @@ disconnectBackend,
 reconnectBackend,
 outputChannel
 );
-
+const { autoConnect, userEmail } = getConfig();
 if (
 	autoConnect &&
 	userEmail &&
@@ -1358,12 +1219,12 @@ if (
 	setTimeout(
 	()=>{
 
-
 		vscode.commands.executeCommand(
 			'jira-assistant.connectBackend'
 		);
 
 	},
+	1000
 	);
 
 }
@@ -1372,4 +1233,6 @@ updateStatusBar();
 
 
 
-export function deactivate() {}
+export function deactivate() {
+    socket?.close();
+}
