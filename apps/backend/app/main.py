@@ -1,269 +1,424 @@
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException
-from pydantic import BaseModel, Field
-from app.models import (JiraTicketEvent, DeveloperContextRequest, ClientRegistrationRequest)
-from app.response_models import (DeveloperContextResponse)
+import os
 import logging
 from datetime import datetime
+from typing import Optional, List, Dict, Any
+from contextlib import asynccontextmanager
 
+from dotenv import load_dotenv
+load_dotenv()
+
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Request, BackgroundTasks
+from pydantic import BaseModel, Field
+
+from app import database
+from app import jira_service
+from app import ai_service
+from app.models import (
+    JiraTicketEvent,
+    DeveloperContextRequest,
+    ClientRegistrationRequest,
+    AiAnalyzeRequest,
+    FetchJiraTicketRequest,
+    CreateTicketRequest
+)
+from app.response_models import DeveloperContextResponse
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-app = FastAPI(title="Jira VS Code Assistant Backend")
 
-# Storage
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Initialize SQLite database schema and seed default data
+    database.init_db()
+    logger.info("FastAPI backend initialized with SQLite persistence and AI engine")
+    yield
 
-clients_by_email = {}
 
-developer_contexts = {}
+app = FastAPI(
+    title="Jira VS Code Assistant Backend",
+    version="2.0.0",
+    description="Backend with real SQLite database, Jira Cloud REST API integration, and OpenAI-powered code assistance.",
+    lifespan=lifespan
+)
 
-generated_tickets = []
+# Active connected WebSocket clients keyed by email
+clients_by_email: Dict[str, List[Dict[str, Any]]] = {}
 
-# Mock Ticket Request Model
 
-class MockTicketRequest(BaseModel):
+# Client Registration & Management
 
-    assigneeEmail: str = Field(..., min_length=1)
-    ticketKey: str = Field(..., min_length=1)
-    title: str = Field(..., min_length=1)
-
-# Create Mock Ticket
-
-def create_mock_ticket(data=None):
-
-    if data:
-        assignee_email = data.assigneeEmail
-        ticket_key = data.ticketKey
-        ticket_title = data.title
-
-    else:
-        assignee_email = "developer@example.com"
-        ticket_key = "PROJ-123"
-        ticket_title = "Fix login redirect issue"
-
-    if not ticket_key.strip():
-
-        raise HTTPException(status_code=400, detail="Ticket key cannot be empty")
-
-    ticket = JiraTicketEvent(
-        event_type= "ticket_assigned",
-        ticket_key= ticket_key,
-        ticket_title= ticket_title,
-        ticket_description= "Users are redirected to wrong page after login.",
-        ticket_status="To Do",
-        ticket_priority="High",
-        ticket_url= f"https://jira.example.com/browse/{ticket_key}",
-        comments=["Issue reported by QA team.", "Needs investigation."],
-        assignee_email=assignee_email
-    )
-    return ticket
-
-# Register Client
-
-def register_client(email, client_id, websocket):
-
+def register_client(email: str, client_id: str, websocket: WebSocket):
     if email not in clients_by_email:
         clients_by_email[email] = []
-    clients_by_email[email].append(
-        {
-            "client_id": client_id,
-            "websocket": websocket,
-            "connected_at": datetime.now().isoformat(),
-            "last_seen": datetime.now().isoformat()
-        }
+    clients_by_email[email].append({
+        "client_id": client_id,
+        "websocket": websocket,
+        "connected_at": datetime.now().isoformat(),
+        "last_seen": datetime.now().isoformat()
+    })
+    logger.info(f"Client registered: {email} | Client ID: {client_id}")
+
+
+async def send_ticket_to_clients(ticket_dict: Dict[str, Any]):
+    """
+    Broadcasts a Jira ticket to relevant connected clients or all active clients.
+    """
+    event = JiraTicketEvent(
+        event_type="ticket_assigned",
+        ticket_key=ticket_dict.get("key") or ticket_dict.get("ticket_key", "UNKNOWN"),
+        ticket_title=ticket_dict.get("title") or ticket_dict.get("ticket_title", "Untitled"),
+        ticket_description=ticket_dict.get("description") or ticket_dict.get("ticket_description", ""),
+        ticket_status=ticket_dict.get("status") or ticket_dict.get("ticket_status", "To Do"),
+        ticket_priority=ticket_dict.get("priority") or ticket_dict.get("ticket_priority", "Medium"),
+        ticket_url=ticket_dict.get("url") or ticket_dict.get("ticket_url", ""),
+        comments=ticket_dict.get("comments") or [],
+        assignee_email=ticket_dict.get("assignee_email") or ticket_dict.get("assigneeEmail", "developer@example.com"),
+        assignee_name=ticket_dict.get("assignee_name") or ticket_dict.get("assigneeName"),
+        project_key=ticket_dict.get("project_key") or ticket_dict.get("projectKey")
     )
 
-    logger.info(
-       f"Client registered successfully | "
-       f"Email: {email} | "
-       f"Client ID: {client_id}"
-   )
+    assignee = event.assignee_email.strip().lower() if event.assignee_email else ""
+    dispatched = 0
 
-# Send Ticket
+    # First attempt sending to matching assignee clients
+    target_clients = clients_by_email.get(assignee, [])
 
-async def send_ticket_to_clients(ticket):
+    # If no clients with matching email are connected, broadcast to all connected clients
+    if not target_clients:
+        target_clients = [c for client_list in clients_by_email.values() for c in client_list]
 
-    for email, clients in clients_by_email.items():
-        for client in clients:
-            try:
-                await client["websocket"].send_json(ticket.model_dump())
-                client["last_seen"] = (datetime.now().isoformat())
-                logger.info(f"Ticket sent to {email}")
+    for client in target_clients:
+        try:
+            await client["websocket"].send_json(event.model_dump())
+            client["last_seen"] = datetime.now().isoformat()
+            dispatched += 1
+        except Exception as e:
+            logger.error(f"Failed to send ticket to client: {e}")
 
-            except Exception as e:
-                logger.error(str(e))
+    logger.info(f"Ticket {event.ticket_key} dispatched to {dispatched} client(s)")
 
-# WebSocket Endpoint
+
+# WebSocket Endpoint for VS Code Extension
 
 @app.websocket("/ws/client")
 async def websocket_client(websocket: WebSocket):
     await websocket.accept()
-
     email = None
     client_id = None
 
     try:
-        logger.info("VS Code client connected")
+        logger.info("VS Code client connecting...")
         data = await websocket.receive_json()
 
-        # Validation
         try:
-
             registration = ClientRegistrationRequest(**data)
         except Exception as e:
-            await websocket.send_json(
-                {
-                    "type": "error",
-                    "message": "Invalid registration message",
-                    "details": str(e) 
-                }
-            )
+            await websocket.send_json({
+                "type": "error",
+                "message": "Invalid registration message",
+                "details": str(e)
+            })
             return
-        
+
         email = registration.userEmail
         client_id = registration.clientId
-
         register_client(email, client_id, websocket)
 
-        await websocket.send_json(
-            {
-                "type": "client_registered",
-                "status": "success",
-                "userEmail": email
-            }
-        )
+        await websocket.send_json({
+            "type": "client_registered",
+            "status": "success",
+            "userEmail": email
+        })
 
-        # Ticket behaviour
+        # Fetch latest ticket from real SQLite database to display in extension
+        recent_tickets = database.get_all_tickets(limit=1)
+        if recent_tickets:
+            latest = recent_tickets[0]
+            event = JiraTicketEvent(
+                event_type="ticket_assigned",
+                ticket_key=latest["key"],
+                ticket_title=latest["title"],
+                ticket_description=latest.get("description", ""),
+                ticket_status=latest.get("status", "To Do"),
+                ticket_priority=latest.get("priority", "Medium"),
+                ticket_url=latest.get("url", ""),
+                comments=latest.get("comments", []),
+                assignee_email=latest.get("assignee_email", email)
+            )
+            await websocket.send_json(event.model_dump())
+            logger.info(f"Sent latest ticket {latest['key']} from database to {email}")
 
-        ticket = create_mock_ticket()
-
-        await websocket.send_json(ticket.model_dump())
-        logger.info("Ticket sent automatically")
-
+        # Keep connection open for incoming messages and heartbeats
         while True:
             message = await websocket.receive_text()
-            logger.info(f"Message received {message}")
+            logger.debug(f"WS message from {email}: {message}")
 
     except WebSocketDisconnect:
-
-        logger.info("Client disconnected")
-
+        logger.info(f"Client disconnected: {email} | {client_id}")
     finally:
-
         if email and email in clients_by_email:
             clients_by_email[email] = [
-                client
-                for client in clients_by_email[email]
-                if client["client_id"] != client_id
+                c for c in clients_by_email[email] if c["client_id"] != client_id
             ]
             if len(clients_by_email[email]) == 0:
                 del clients_by_email[email]
 
-# Connected Clients
+
+# Health Check & Service Status
+
+@app.get("/health")
+def health_check():
+    return {
+        "service": "jira-vscode-assistant-backend",
+        "status": "healthy",
+        "database": "sqlite",
+        "db_path": database.DB_PATH,
+        "jira_configured": jira_service.is_jira_configured(),
+        "ai_provider": "openai" if os.environ.get("OPENAI_API_KEY") else "free_openai_pollinations",
+        "connected_clients": sum(len(c) for c in clients_by_email.values())
+    }
+
+
+# Real Database Ticket Endpoints
+
+@app.get("/tickets")
+def list_tickets(limit: int = 50):
+    """Returns list of tickets stored in SQLite database."""
+    tickets = database.get_all_tickets(limit=limit)
+    return {"tickets": tickets, "count": len(tickets)}
+
+
+@app.get("/tickets/{ticket_key}")
+def get_ticket(ticket_key: str):
+    """Retrieves full ticket details, developer contexts, and AI analyses from DB."""
+    ticket = database.get_ticket(ticket_key)
+    if not ticket:
+        raise HTTPException(status_code=404, detail=f"Ticket {ticket_key} not found")
+
+    contexts = database.get_developer_contexts(ticket_key)
+    analyses = database.get_ai_analyses(ticket_key)
+
+    return {
+        "ticket": ticket,
+        "developerContexts": contexts,
+        "aiAnalyses": analyses
+    }
+
+
+@app.post("/tickets")
+async def create_ticket(request: CreateTicketRequest):
+    """Manually creates/upserts a ticket into database and broadcasts to VS Code."""
+    ticket_dict = database.upsert_ticket({
+        "key": request.ticketKey,
+        "title": request.title,
+        "description": request.description,
+        "status": request.status,
+        "priority": request.priority,
+        "assignee_email": request.assigneeEmail,
+        "assignee_name": request.assigneeName,
+        "comments": request.comments or []
+    })
+    await send_ticket_to_clients(ticket_dict)
+    return {"success": True, "ticket": ticket_dict}
+
+
+# Developer Context Endpoints
+
+@app.get("/tickets/{ticket_key}/developer-context")
+@app.get("/dev/tickets/{ticket_key}/developer-context")
+def get_developer_contexts(ticket_key: str):
+    """Fetches developer contexts for a ticket."""
+    submissions = database.get_developer_contexts(ticket_key)
+    return {
+        "ticketKey": ticket_key,
+        "submissions": submissions
+    }
+
+
+@app.post("/tickets/{ticket_key}/developer-context", response_model=DeveloperContextResponse)
+def submit_developer_context(ticket_key: str, request: DeveloperContextRequest):
+    """Saves developer context into SQLite database."""
+    if not ticket_key.strip():
+        return DeveloperContextResponse(
+            success=False,
+            message="Invalid ticket key",
+            ticketKey=ticket_key,
+            submittedAt=""
+        )
+
+    if not request.additionalContext.strip():
+        return DeveloperContextResponse(
+            success=False,
+            message="additionalContext cannot be empty",
+            ticketKey=ticket_key,
+            submittedAt=""
+        )
+
+    saved = database.insert_developer_context({
+        "ticketKey": ticket_key,
+        "userEmail": request.userEmail,
+        "additionalContext": request.additionalContext,
+        "repoPath": request.repoPath,
+        "activeFile": request.activeFile,
+        "branchName": request.branchName,
+        "notes": request.notes
+    })
+
+    return DeveloperContextResponse(
+        success=True,
+        message="Developer context submitted successfully to database",
+        ticketKey=ticket_key,
+        submittedAt=saved["submittedAt"]
+    )
+
+
+# AI Analysis Endpoint (Powered by OpenAI / Free OpenAI API)
+
+@app.post("/tickets/{ticket_key}/ai-analyze")
+async def analyze_ticket_with_ai(ticket_key: str, request: Optional[AiAnalyzeRequest] = None):
+    """
+    Executes AI analysis for a Jira ticket using OpenAI-compatible API.
+    Uses free OpenAI API when no key is set, or user's custom OpenAI key.
+    """
+    ticket = database.get_ticket(ticket_key)
+    if not ticket:
+        # If ticket not found in DB, try fetching from Jira or create basic record
+        try:
+            ticket = await jira_service.fetch_jira_ticket(ticket_key)
+        except Exception:
+            ticket = {
+                "key": ticket_key,
+                "title": f"Jira Issue {ticket_key}",
+                "description": "Developer initiated AI analysis.",
+                "status": "In Progress",
+                "priority": "Medium",
+                "comments": []
+            }
+
+    # Fetch latest developer context from database or request
+    contexts = database.get_developer_contexts(ticket_key)
+    latest_context = contexts[0] if contexts else None
+
+    # Merge context from request payload if passed
+    if request:
+        dev_ctx = {
+            "additionalContext": request.additionalContext or (latest_context.get("additional_context") if latest_context else ""),
+            "activeFile": request.activeFile or (latest_context.get("active_file") if latest_context else ""),
+            "repoPath": request.repoPath or (latest_context.get("repo_path") if latest_context else ""),
+            "branchName": request.branchName or (latest_context.get("branch_name") if latest_context else "")
+        }
+        custom_prompt = request.prompt
+    else:
+        dev_ctx = latest_context
+        custom_prompt = None
+
+    result = await ai_service.generate_ai_analysis(
+        ticket=ticket,
+        developer_context=dev_ctx,
+        custom_prompt=custom_prompt
+    )
+    return result
+
+
+@app.get("/tickets/{ticket_key}/ai-analyses")
+def get_ticket_ai_analyses(ticket_key: str):
+    """Retrieves previous AI analyses for a ticket."""
+    analyses = database.get_ai_analyses(ticket_key)
+    return {"ticketKey": ticket_key, "analyses": analyses}
+
+
+# Real Jira Cloud Integration Endpoints
+
+@app.post("/api/jira/fetch")
+async def fetch_jira_ticket_endpoint(request: FetchJiraTicketRequest):
+    """
+    Fetches a real Jira ticket from Atlassian Jira Cloud REST API v3,
+    persists it into SQLite database, and broadcasts it to connected VS Code extensions.
+    """
+    try:
+        ticket = await jira_service.fetch_jira_ticket(request.ticketKey)
+        await send_ticket_to_clients(ticket)
+        return {
+            "success": True,
+            "message": f"Ticket {request.ticketKey} fetched successfully",
+            "ticket": ticket
+        }
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error(f"Failed to fetch Jira ticket: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to fetch Jira ticket: {str(e)}")
+
+
+@app.post("/api/jira/webhook")
+async def jira_webhook_receiver(request: Request):
+    """
+    Real Atlassian Jira Cloud Webhook endpoint.
+    Configure Jira -> System -> WebHooks to point to this URL.
+    Receives issue created/updated events, persists to SQLite DB, and broadcasts live.
+    """
+    try:
+        payload = await request.json()
+        event_name = payload.get("webhookEvent", "jira:issue_updated")
+        issue = payload.get("issue")
+
+        if not issue:
+            return {"status": "ignored", "reason": "No issue payload"}
+
+        logger.info(f"Received real Jira webhook event: {event_name}")
+        normalized_ticket = jira_service.parse_jira_issue_payload(issue)
+        await send_ticket_to_clients(normalized_ticket)
+
+        return {
+            "status": "success",
+            "event": event_name,
+            "ticketKey": normalized_ticket["key"]
+        }
+    except Exception as e:
+        logger.error(f"Error handling Jira webhook: {e}")
+        raise HTTPException(status_code=500, detail=f"Webhook processing error: {str(e)}")
+
+
+# Legacy / Dev Endpoints (Preserved for backwards compatibility)
 
 @app.get("/dev/clients")
 def get_connected_clients():
-
     response = {}
-
     for email, clients in clients_by_email.items():
         response[email] = {
             "active_clients": len(clients)
         }
     return response
 
-# Health Check
-
-@app.get("/health")
-def health_check():
-
-    return {
-        "service":"jira-vscode-assistant-backend",
-      "status":"healthy",
-      "message":"Backend is running"
-
-    }
-
-# Developer Context GET
-
-@app.get("/dev/tickets/{ticket_key}/developer-context")
-def get_ticket_developer_context(ticket_key: str):
-
-    submissions = developer_contexts.get(ticket_key, [])
-
-    return {
-        "ticketKey": ticket_key,
-        "submissions": submissions
-    }
-
-# Ticket History
 
 @app.get("/dev/tickets")
 def get_generated_tickets():
+    tickets = database.get_all_tickets(limit=50)
+    return {"tickets": tickets}
 
-    return {
-        "tickets":generated_tickets
-    }
 
-# Mock Ticket
+class MockTicketRequest(BaseModel):
+    assigneeEmail: str = Field(..., min_length=1)
+    ticketKey: str = Field(..., min_length=1)
+    title: str = Field(..., min_length=1)
+
 
 @app.post("/dev/mock-ticket")
 async def get_mock_ticket(request: MockTicketRequest):
-
-    ticket = create_mock_ticket(request)
-    generated_tickets.append(
-        {
-            "key": ticket.ticket_key,
-            "title": ticket.ticket_title,
-            "assigneeEmail": ticket.assignee_email,
-            "status": ticket.ticket_status
-        }
-    )
-    await send_ticket_to_clients(ticket)
+    ticket_dict = {
+        "key": request.ticketKey,
+        "title": request.title,
+        "description": "Users are redirected to wrong page after login.",
+        "status": "To Do",
+        "priority": "High",
+        "url": f"https://jira.example.com/browse/{request.ticketKey}",
+        "assignee_email": request.assigneeEmail,
+        "comments": ["Issue reported by QA team.", "Needs investigation."]
+    }
+    saved = database.upsert_ticket(ticket_dict)
+    await send_ticket_to_clients(saved)
     return {
         "broadcastAttempted": True,
-        "ticketKey": ticket.ticket_key
+        "ticketKey": request.ticketKey
     }
-
-# Developer Context Submit
-
-@app.post("/tickets/{ticket_key}/developer-context", response_model=DeveloperContextResponse)
-
-def submit_developer_context(ticket_key: str, request: DeveloperContextRequest):
-
-    if not ticket_key.strip():
-        return DeveloperContextResponse(
-            success=False,
-            message="Invalid ticket key",
-            ticketKey=ticket_key,
-            submittedAt=None
-        )
-
-    if not request.additionalContext.strip():
-        return DeveloperContextResponse(
-            success=False,
-            message= "additionalContext cannot be empty",
-            ticketKey=ticket_key,
-            submittedAt=None
-        )
-
-    context = {
-        "ticketKey": ticket_key,
-        "userEmail": request.userEmail,
-        "additionalContext": request.additionalContext,
-        "repoPath": request.repoPath,
-        "branchName": request.branchName,
-        "notes": request.notes,
-        "submittedAt": datetime.now().isoformat()
-    }
-    if ticket_key not in developer_contexts:
-        developer_contexts[ticket_key] = []
-
-    developer_contexts[ticket_key].append(context)
-
-    return DeveloperContextResponse(
-        success=True,
-        message= "Developer context submitted successfully",
-        ticketKey=ticket_key,
-        submittedAt=context["submittedAt"]
-    )

@@ -1,4 +1,3 @@
-
 export type TicketComment = {
     author?: string;
     body: string;
@@ -46,16 +45,40 @@ export type DeveloperContextSubmission = {
     branchName?: string;
     notes?: string;
 };
+
 export type SubmitContextMessage = {
     type: 'submit_context';
     ticketKey: string;
     additionalContext: string;
 };
+
+export type RunAiMessage = {
+    type: 'run_ai';
+    ticketKey: string;
+    prompt?: string;
+    additionalContext?: string;
+};
+
+export type FetchJiraMessage = {
+    type: 'fetch_jira';
+    ticketKey: string;
+};
+
 export type WebviewReadyMessage = {
     type: 'webviewReady';
 };
+
 export type ConnectionStatus =
     | 'connected'
     | 'connecting'
     | 'disconnected'
     | 'error';
+
+export type AiAnalysisResult = {
+    success: boolean;
+    ticketKey: string;
+    analysis: string;
+    provider: string;
+    model: string;
+    createdAt?: string;
+};
