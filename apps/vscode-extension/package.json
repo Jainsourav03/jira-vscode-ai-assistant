@@ -1,0 +1,156 @@
+{
+  "name": "jira-assistant",
+  "displayName": "Jira Assistant",
+  "version": "0.1.0",
+  "publisher": "your-name",
+  "description": "VS Code Assistant with Real Jira Integration, SQLite Database Persistence, and OpenAI-Powered Code Guidance.",
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "main": "./out/extension.js",
+  "activationEvents": [
+    "onStartupFinished",
+    "onCommand:jira-assistant.hello",
+    "onCommand:jira-assistant.openPanel",
+    "onCommand:jira-assistant.mockTicket",
+    "onCommand:jira-assistant.connectBackend",
+    "onCommand:jira-assistant.openLatestTicket",
+    "onCommand:jira-assistant.openSettings",
+    "onCommand:jira-assistant.showConnectionStatus",
+    "onCommand:jira-assistant.statusBarMenu",
+    "onCommand:jira-assistant.showRecentTickets",
+    "onCommand:jira-assistant.disconnectBackend",
+    "onCommand:jira-assistant.reconnectBackend",
+    "onCommand:jira-assistant.runAi",
+    "onCommand:jira-assistant.fetchJiraTicket"
+  ],
+  "contributes": {
+    "commands": [
+      {
+        "command": "jira-assistant.hello",
+        "title": "Jira Assistant: Hello"
+      },
+      {
+        "command": "jira-assistant.openLatestTicket",
+        "title": "Jira Assistant: Open Latest Ticket"
+      },
+      {
+        "command": "jira-assistant.openPanel",
+        "title": "Jira Assistant: Open Ticket & AI Panel"
+      },
+      {
+        "command": "jira-assistant.runAi",
+        "title": "Jira Assistant: Run AI Analysis on Ticket"
+      },
+      {
+        "command": "jira-assistant.fetchJiraTicket",
+        "title": "Jira Assistant: Fetch Real Jira Ticket"
+      },
+      {
+        "command": "jira-assistant.showRecentTickets",
+        "title": "Jira Assistant: Show Recent Tickets"
+      },
+      {
+        "command": "jira-assistant.openSettings",
+        "title": "Jira Assistant: Open Settings"
+      },
+      {
+        "command": "jira-assistant.mockTicket",
+        "title": "Jira Assistant: Show Mock Ticket Notification"
+      },
+      {
+        "command": "jira-assistant.connectBackend",
+        "title": "Jira Assistant: Connect Backend"
+      },
+      {
+        "command": "jira-assistant.disconnectBackend",
+        "title": "Jira Assistant: Disconnect Backend"
+      },
+      {
+        "command": "jira-assistant.reconnectBackend",
+        "title": "Jira Assistant: Reconnect Backend"
+      },
+      {
+        "command": "jira-assistant.showConnectionStatus",
+        "title": "Jira Assistant: Show Connection Status"
+      },
+      {
+        "command": "jira-assistant.statusBarMenu",
+        "title": "Jira Assistant Menu"
+      }
+    ],
+    "configuration": {
+      "title": "Jira Assistant",
+      "properties": {
+        "jiraAssistant.backendUrl": {
+          "type": "string",
+          "default": "http://localhost:8000",
+          "description": "Backend REST API URL"
+        },
+        "jiraAssistant.websocketUrl": {
+          "type": "string",
+          "default": "ws://localhost:8000/ws/client",
+          "description": "Backend WebSocket URL"
+        },
+        "jiraAssistant.userEmail": {
+          "type": "string",
+          "default": "developer@example.com",
+          "description": "Developer email matching Jira assignee"
+        },
+        "jiraAssistant.autoConnect": {
+          "type": "boolean",
+          "default": true,
+          "description": "Automatically connect to backend on start"
+        },
+        "jiraAssistant.showNotifications": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show Jira ticket notifications"
+        },
+        "jiraAssistant.jiraBaseUrl": {
+          "type": "string",
+          "default": "",
+          "description": "Atlassian Jira URL (e.g., https://your-org.atlassian.net)"
+        },
+        "jiraAssistant.jiraEmail": {
+          "type": "string",
+          "default": "",
+          "description": "Jira Account Email"
+        },
+        "jiraAssistant.jiraApiToken": {
+          "type": "string",
+          "default": "",
+          "description": "Jira API Token"
+        },
+        "jiraAssistant.openAiApiKey": {
+          "type": "string",
+          "default": "",
+          "description": "Optional: Custom OpenAI API Key (leave blank to use free OpenAI API)"
+        },
+        "jiraAssistant.openAiBaseUrl": {
+          "type": "string",
+          "default": "https://api.openai.com/v1",
+          "description": "OpenAI-compatible Base URL"
+        },
+        "jiraAssistant.openAiModel": {
+          "type": "string",
+          "default": "gpt-4o-mini",
+          "description": "OpenAI Model name"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "compile": "tsc -p .",
+    "watch": "tsc -w"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/vscode": "^1.90.0",
+    "@types/ws": "^8.18.1",
+    "typescript": "^5.0.0"
+  },
+  "dependencies": {
+    "ws": "^8.21.0"
+  }
+}

@@ -1,0 +1,84 @@
+export type TicketComment = {
+    author?: string;
+    body: string;
+};
+
+export type Ticket = {
+    key: string;
+    title: string;
+    description?: string;
+    status?: string;
+    priority?: string;
+    url?: string;
+    assigneeEmail?: string;
+    projectKey?: string;
+    receivedAt?: string;
+    assigneeDisplayName?: string;  
+    comments?: Array<{
+        author?: string;
+        body: string;
+    }>;
+};
+
+export type TicketAssignedEvent = {
+    event_type: 'ticket_assigned';
+    ticket_key: string;
+    ticket_title: string;
+    ticket_description?: string;
+    ticket_status?: string;
+    ticket_priority?: string;
+    ticket_url?: string;
+    assignee_email?: string;
+    comments?: string[];
+};
+
+export type TicketMetadata = {
+    projectKey?: string;
+    assigneeDisplayName?: string;
+};
+
+export type DeveloperContextSubmission = {
+    userEmail: string;
+    additionalContext: string;
+    repoPath?: string;
+    activeFile?: string;
+    branchName?: string;
+    notes?: string;
+};
+
+export type SubmitContextMessage = {
+    type: 'submit_context';
+    ticketKey: string;
+    additionalContext: string;
+};
+
+export type RunAiMessage = {
+    type: 'run_ai';
+    ticketKey: string;
+    prompt?: string;
+    additionalContext?: string;
+};
+
+export type FetchJiraMessage = {
+    type: 'fetch_jira';
+    ticketKey: string;
+};
+
+export type WebviewReadyMessage = {
+    type: 'webviewReady';
+};
+
+export type ConnectionStatus =
+    | 'connected'
+    | 'connecting'
+    | 'disconnected'
+    | 'error';
+
+export type AiAnalysisResult = {
+    success: boolean;
+    ticketKey: string;
+    analysis: string;
+    provider: string;
+    model: string;
+    createdAt?: string;
+};
