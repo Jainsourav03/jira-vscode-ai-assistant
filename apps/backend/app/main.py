@@ -8,6 +8,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Request, BackgroundTasks
+from fastapi.responses import HTMLResponse, JSONResponse
 from pydantic import BaseModel, Field
 
 from app import database
@@ -163,6 +164,234 @@ async def websocket_client(websocket: WebSocket):
             ]
             if len(clients_by_email[email]) == 0:
                 del clients_by_email[email]
+
+
+# Root Welcome & Landing Page
+
+@app.get("/", response_class=HTMLResponse)
+def root_page():
+    return """<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Jira VS Code Assistant - Backend API</title>
+    <style>
+        :root {
+            --bg: #0f172a;
+            --card-bg: #1e293b;
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
+            --accent: #38bdf8;
+            --accent-hover: #0284c7;
+            --success: #22c55e;
+            --border: #334155;
+            --code-bg: #0b1120;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            background: var(--bg);
+            color: var(--text-main);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 40px 20px;
+        }
+        .container {
+            max-width: 860px;
+            width: 100%;
+        }
+        .badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            background: rgba(34, 197, 94, 0.15);
+            color: var(--success);
+            border: 1px solid rgba(34, 197, 94, 0.3);
+            border-radius: 9999px;
+            padding: 4px 12px;
+            font-size: 13px;
+            font-weight: 600;
+            margin-bottom: 16px;
+        }
+        .badge-dot {
+            width: 8px;
+            height: 8px;
+            background: var(--success);
+            border-radius: 50%;
+            display: inline-block;
+        }
+        h1 {
+            font-size: 32px;
+            font-weight: 700;
+            letter-spacing: -0.02em;
+            margin-bottom: 8px;
+        }
+        p.subtitle {
+            color: var(--text-muted);
+            font-size: 16px;
+            margin-bottom: 32px;
+            line-height: 1.5;
+        }
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+            gap: 16px;
+            margin-bottom: 32px;
+        }
+        .card {
+            background: var(--card-bg);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 20px;
+            transition: transform 0.15s ease, border-color 0.15s ease;
+            text-decoration: none;
+            color: inherit;
+            display: block;
+        }
+        .card:hover {
+            transform: translateY(-2px);
+            border-color: var(--accent);
+        }
+        .card h3 {
+            font-size: 16px;
+            font-weight: 600;
+            color: var(--accent);
+            margin-bottom: 6px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .card p {
+            color: var(--text-muted);
+            font-size: 13px;
+            line-height: 1.4;
+        }
+        .endpoints-section {
+            background: var(--card-bg);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 24px;
+        }
+        .endpoints-section h2 {
+            font-size: 18px;
+            margin-bottom: 16px;
+            font-weight: 600;
+        }
+        .endpoint-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 10px 0;
+            border-bottom: 1px solid var(--border);
+            font-size: 14px;
+        }
+        .endpoint-row:last-child {
+            border-bottom: none;
+        }
+        .method {
+            font-size: 11px;
+            font-weight: 700;
+            padding: 2px 8px;
+            border-radius: 4px;
+            text-transform: uppercase;
+            font-family: monospace;
+        }
+        .method-get { background: rgba(56, 189, 248, 0.15); color: var(--accent); }
+        .method-post { background: rgba(34, 197, 94, 0.15); color: var(--success); }
+        .method-ws { background: rgba(168, 85, 247, 0.15); color: #c084fc; }
+        .route-link {
+            color: var(--text-main);
+            text-decoration: none;
+            font-family: monospace;
+            font-size: 13px;
+        }
+        .route-link:hover { color: var(--accent); text-decoration: underline; }
+        .route-desc {
+            color: var(--text-muted);
+            font-size: 13px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="badge"><span class="badge-dot"></span> Backend Active &amp; Operational</div>
+        <h1>Jira VS Code Assistant API</h1>
+        <p class="subtitle">FastAPI Real-Time WebSocket &amp; Issue Context Service with SQLite Persistence and AI Analysis.</p>
+
+        <div class="grid">
+            <a href="/docs" class="card">
+                <h3>📖 Interactive Swagger Docs &rarr;</h3>
+                <p>Test all API endpoints, inspect request/response schemas, and execute live calls.</p>
+            </a>
+            <a href="/health" class="card">
+                <h3>🩺 Health &amp; Diagnostics &rarr;</h3>
+                <p>Check SQLite connection state, active WebSocket clients, and AI provider status.</p>
+            </a>
+            <a href="/tickets" class="card">
+                <h3>📋 Active Tickets in DB &rarr;</h3>
+                <p>View current synced Jira tickets and mock developer backlog.</p>
+            </a>
+        </div>
+
+        <div class="endpoints-section">
+            <h2>Core Service Routes</h2>
+            <div class="endpoint-row">
+                <div>
+                    <span class="method method-get">GET</span>
+                    <a href="/docs" class="route-link">/docs</a>
+                </div>
+                <span class="route-desc">Swagger UI Documentation</span>
+            </div>
+            <div class="endpoint-row">
+                <div>
+                    <span class="method method-get">GET</span>
+                    <a href="/health" class="route-link">/health</a>
+                </div>
+                <span class="route-desc">System health &amp; connected clients status</span>
+            </div>
+            <div class="endpoint-row">
+                <div>
+                    <span class="method method-get">GET</span>
+                    <a href="/tickets" class="route-link">/tickets</a>
+                </div>
+                <span class="route-desc">List tickets stored in SQLite</span>
+            </div>
+            <div class="endpoint-row">
+                <div>
+                    <span class="method method-ws">WS</span>
+                    <span class="route-link">/ws/client</span>
+                </div>
+                <span class="route-desc">Persistent full-duplex WebSocket hub for VS Code extension</span>
+            </div>
+            <div class="endpoint-row">
+                <div>
+                    <span class="method method-post">POST</span>
+                    <span class="route-link">/tickets/{key}/developer-context</span>
+                </div>
+                <span class="route-desc">Submit active editor file, Git branch &amp; notes</span>
+            </div>
+            <div class="endpoint-row">
+                <div>
+                    <span class="method method-post">POST</span>
+                    <span class="route-link">/tickets/{key}/ai-analyze</span>
+                </div>
+                <span class="route-desc">Trigger AI implementation plan &amp; architectural analysis</span>
+            </div>
+            <div class="endpoint-row">
+                <div>
+                    <span class="method method-post">POST</span>
+                    <span class="route-link">/api/jira/webhook</span>
+                </div>
+                <span class="route-desc">Atlassian Jira Cloud incoming webhook handler</span>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
+"""
 
 
 # Health Check & Service Status
